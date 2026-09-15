@@ -823,7 +823,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("#### 🤖 AI 인텔리전스 & 실시간 웹 검색")
     
-    # Streamlit Secrets 또는 환경변수에서 GEMINI_API_KEY 자동 로드
+    # Streamlit Secrets 또는 환경변수에서 GEMINI_API_KEY 자동 로드 (보안: UI에는 절대 노출하지 않음)
     default_secret_key = ""
     try:
         if "GEMINI_API_KEY" in st.secrets:
@@ -836,17 +836,23 @@ with st.sidebar:
     if not default_secret_key:
         default_secret_key = os.environ.get("GEMINI_API_KEY", "").strip()
 
+    has_secret_key = bool(default_secret_key)
+
     user_api_key_input = st.text_input(
         "Gemini API Key",
-        value=default_secret_key,
+        value="",
         type="password",
-        placeholder="AIzaSy... (Secrets 등록 시 자동 로드)",
-        help="Google AI Studio에서 발급받은 API Key입니다. Streamlit Secrets에 GEMINI_API_KEY가 등록되어 있으면 자동으로 연동됩니다."
+        placeholder="시스템 기본 키 적용 중 (직접 입력 시 덮어쓰기)" if has_secret_key else "AIzaSy...",
+        help="Google AI Studio에서 발급받은 API Key입니다. 시스템에 기본 키가 등록되어 있어 비워두셔도 정상 작동합니다." if has_secret_key else "Google AI Studio에서 발급받은 API Key를 입력하세요."
     )
-    gemini_api_key = user_api_key_input.strip() if user_api_key_input else default_secret_key
+    # 실제 API 호출에는 사용자가 직접 입력한 키를 최우선으로, 비워두면 secrets 키를 내부 백엔드 메모리에서만 참조
+    gemini_api_key = user_api_key_input.strip() if user_api_key_input.strip() else default_secret_key
     
-    if default_secret_key and gemini_api_key == default_secret_key:
-        st.success("🔒 Cloud Secrets의 API Key가 안전하게 자동 연동되었습니다.")
+    if has_secret_key:
+        if user_api_key_input.strip():
+            st.info("✏️ 사용자가 직접 입력한 커스텀 API Key가 적용되었습니다.")
+        else:
+            st.success("🔒 시스템 기본 API 키가 안전하게 적용 중입니다 (직접 입력 시 덮어쓰기)")
     
     # API 키 입력 시 지원 모델 목록 동적 자동 감지 (preview/omni 제외 완료)
     detected_models = []
