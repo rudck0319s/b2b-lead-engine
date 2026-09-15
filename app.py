@@ -1,3 +1,4 @@
+import os
 import io
 import re
 import json
@@ -821,12 +822,31 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("#### 🤖 AI 인텔리전스 & 실시간 웹 검색")
-    gemini_api_key = st.text_input(
+    
+    # Streamlit Secrets 또는 환경변수에서 GEMINI_API_KEY 자동 로드
+    default_secret_key = ""
+    try:
+        if "GEMINI_API_KEY" in st.secrets:
+            default_secret_key = str(st.secrets["GEMINI_API_KEY"]).strip()
+        elif hasattr(st.secrets, "get"):
+            default_secret_key = str(st.secrets.get("GEMINI_API_KEY", "")).strip()
+    except Exception:
+        pass
+    
+    if not default_secret_key:
+        default_secret_key = os.environ.get("GEMINI_API_KEY", "").strip()
+
+    user_api_key_input = st.text_input(
         "Gemini API Key",
+        value=default_secret_key,
         type="password",
-        placeholder="AIzaSy...",
-        help="Google AI Studio에서 발급받은 API Key를 입력하세요. 입력 즉시 표준 유효 모델이 자동 감지됩니다."
+        placeholder="AIzaSy... (Secrets 등록 시 자동 로드)",
+        help="Google AI Studio에서 발급받은 API Key입니다. Streamlit Secrets에 GEMINI_API_KEY가 등록되어 있으면 자동으로 연동됩니다."
     )
+    gemini_api_key = user_api_key_input.strip() if user_api_key_input else default_secret_key
+    
+    if default_secret_key and gemini_api_key == default_secret_key:
+        st.success("🔒 Cloud Secrets의 API Key가 안전하게 자동 연동되었습니다.")
     
     # API 키 입력 시 지원 모델 목록 동적 자동 감지 (preview/omni 제외 완료)
     detected_models = []
