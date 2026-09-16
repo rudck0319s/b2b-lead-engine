@@ -431,14 +431,26 @@ def _render_pro_modal_body(excel_bytes, excel_filename, excel_mime):
     code_input = st.text_input(
         "발급받은 인증코드를 입력하세요",
         type="password",
-        placeholder="인증코드 입력 (예: LEAD2026)",
+        placeholder="발급받은 인증코드를 입력하세요",
         key="pro_auth_code_input"
     )
+
+    # 유효한 인증코드 목록 (기본 다중 코드 + st.secrets["AUTH_CODES"] 동적 확장 지원)
+    valid_codes = {"LEAD2026", "PRO7788", "VIP9901"}
+    try:
+        if "AUTH_CODES" in st.secrets:
+            secret_codes = st.secrets["AUTH_CODES"]
+            if isinstance(secret_codes, list):
+                valid_codes.update([str(c).strip() for c in secret_codes if str(c).strip()])
+            elif isinstance(secret_codes, str):
+                valid_codes.update([c.strip() for c in secret_codes.split(",") if c.strip()])
+    except Exception:
+        pass
 
     is_authed = st.session_state.get("is_pro_authenticated", False)
 
     if code_input:
-        if code_input.strip() == "LEAD2026":
+        if code_input.strip() in valid_codes:
             st.session_state["is_pro_authenticated"] = True
             is_authed = True
             st.success("✅ 인증이 완료되었습니다! 아래 버튼을 눌러 엑셀 파일을 다운로드하세요.")
