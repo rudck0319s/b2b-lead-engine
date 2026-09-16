@@ -403,6 +403,69 @@ def generate_excel_bytes(df: pd.DataFrame) -> bytes:
     return output.getvalue()
 
 # -------------------------------------------------------------
+# 3-0. 프로 멤버십 전용 엑셀 다운로드 안내 및 인증코드 해제 모달 (st.dialog)
+# -------------------------------------------------------------
+dialog_fn = getattr(st, "dialog", getattr(st, "experimental_dialog", None))
+
+def _render_pro_modal_body(excel_bytes, excel_filename, excel_mime):
+    st.markdown(
+        """
+        <div style="font-size: 14px; line-height: 1.7; color: #334155; margin-bottom: 16px;">
+        전체 잠재고객 데이터와 AI 맞춤 피칭 문구를 엑셀(.xlsx)로 즉시 다운로드하여 영업 리스트로 활용하세요.<br><br>
+        <span style="color: #e11d48; font-weight: 700; font-size: 15px;">🔥 얼리버드 특별 프로모션: 월 19,900원 (선착순 마감 임박)</span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.link_button(
+        "👉 카카오톡으로 1:1 이용권 신청 및 인증코드 받기",
+        "https://open.kakao.com/o/sNWpUQNi",
+        use_container_width=True,
+        type="primary"
+    )
+
+    st.markdown("---")
+    st.markdown("##### 🔑 인증코드 입력")
+
+    code_input = st.text_input(
+        "발급받은 인증코드를 입력하세요",
+        type="password",
+        placeholder="인증코드 입력 (예: LEAD2026)",
+        key="pro_auth_code_input"
+    )
+
+    is_authed = st.session_state.get("is_pro_authenticated", False)
+
+    if code_input:
+        if code_input.strip() == "LEAD2026":
+            st.session_state["is_pro_authenticated"] = True
+            is_authed = True
+            st.success("✅ 인증이 완료되었습니다! 아래 버튼을 눌러 엑셀 파일을 다운로드하세요.")
+        else:
+            st.error("인증코드가 올바르지 않습니다. 오픈채팅으로 문의해주세요.")
+
+    if is_authed:
+        st.download_button(
+            label="📥 엑셀(.xlsx) 파일 즉시 다운로드",
+            data=excel_bytes,
+            file_name=excel_filename,
+            mime=excel_mime,
+            type="primary",
+            use_container_width=True,
+            key="pro_modal_actual_download_btn"
+        )
+
+if dialog_fn:
+    @dialog_fn("🔒 프로 멤버십 전용 기능 (엑셀 일괄 다운로드)")
+    def show_pro_excel_modal(excel_bytes, excel_filename, excel_mime):
+        _render_pro_modal_body(excel_bytes, excel_filename, excel_mime)
+else:
+    def show_pro_excel_modal(excel_bytes, excel_filename, excel_mime):
+        with st.expander("🔒 프로 멤버십 전용 기능 (엑셀 일괄 다운로드)", expanded=True):
+            _render_pro_modal_body(excel_bytes, excel_filename, excel_mime)
+
+# -------------------------------------------------------------
 # 3-1. Gemini 유효 모델 자동 감지 헬퍼 함수
 # -------------------------------------------------------------
 def get_available_models(api_key: str) -> list:
@@ -1027,20 +1090,29 @@ if results:
     excel_bytes = generate_excel_bytes(df_export)
     excel_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-    # 2) 결과 목록 상단 헤더 & 순수 엑셀(.xlsx) 다운로드 버튼
-    top_col1, top_col2 = st.columns([3.2, 1.3])
+    # 2) 결과 목록 상단 헤더 & 프로 결제 안내 모달 연동 엑셀 다운로드 버튼
+    top_col1, top_col2 = st.columns([2.8, 1.7])
     with top_col1:
         st.markdown(f"### 📋 네이버 플레이스 분석 리스트 ({len(results)}개 매장)")
     with top_col2:
-        st.download_button(
-            label="📥 엑셀(.xlsx) 다운로드",
-            data=excel_bytes,
-            file_name=excel_filename,
-            mime=excel_mime,
-            type="primary",
-            use_container_width=True,
-            help="클릭 시 실제 방문자/블로그 리뷰 수 및 예약 여부가 포함된 정식 .xlsx 보고서가 즉시 다운로드됩니다."
-        )
+        if st.session_state.get("is_pro_authenticated", False):
+            st.download_button(
+                label="📥 실시간 잠재고객 엑셀 다운로드 (PRO)",
+                data=excel_bytes,
+                file_name=excel_filename,
+                mime=excel_mime,
+                type="primary",
+                use_container_width=True,
+                help="PRO 인증이 완료되어 클릭 즉시 .xlsx 보고서가 다운로드됩니다."
+            )
+        else:
+            if st.button(
+                "📥 실시간 잠재고객 엑셀 다운로드",
+                type="primary",
+                use_container_width=True,
+                help="프로 멤버십 전용 기능입니다. 클릭 시 이용권 안내 및 인증코드 입력 팝업이 열립니다."
+            ):
+                show_pro_excel_modal(excel_bytes, excel_filename, excel_mime)
 
     st.write("")
     tab1, tab2 = st.tabs(["📇 카드 뷰 (콜드 피칭 & 상세 분석)", "📊 테이블 뷰 (일괄 데이터 요약)"])
