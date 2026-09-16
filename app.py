@@ -1107,7 +1107,7 @@ if search_btn:
         # 2단계: Gemini 경량 파이프라인 (웹 검색 Grounding 없이 주입된 팩트 지표로 초고속 1회 생성)
         if gemini_api_key:
             active_model = gemini_model_choice or resolve_best_model(gemini_api_key)
-            with st.spinner(f"⚡ Gemini 경량 모델(`{active_model}`)로 팩트 기반 결핍 진단 및 1줄 피칭 생성 중... (약 2~4초)"):
+            with st.spinner("⚡ 실시간 네이버 데이터 분석 및 3개 채널별 맞춤 피칭 생성 중... (약 10~20초 소요)"):
                 analyzed_leads, err_msg = analyze_crawled_leads_with_gemini(
                     gemini_api_key, crawled_leads, target_solution, model_name=active_model
                 )
