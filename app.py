@@ -2,6 +2,8 @@ import os
 import io
 import re
 import json
+import uuid
+import hashlib
 from datetime import datetime
 import streamlit as st
 import pandas as pd
@@ -15,6 +17,61 @@ except ImportError:
     HAS_GENAI = False
 
 # -------------------------------------------------------------
+# 사용자 행동 측정 (Supabase REST API Telemetry Helper)
+# -------------------------------------------------------------
+def log_event(
+    event_name: str,
+    industry: str = None,
+    target_region: str = None,
+    target_solution: str = None,
+    lead_count: int = None,
+    auth_result: str = None
+):
+    """
+    Supabase REST API를 통해 사용자 행동 이벤트를 안전하게 비동기/단기 타임아웃 전송.
+    - secrets 미설정 시 조용히 무시 (오류 발생 차단)
+    - 민감정보(API키, 전화번호, 상세주소, 업체명, 입력코드 평문 등) 절대 제외
+    """
+    try:
+        supabase_url = ""
+        supabase_key = ""
+        if "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
+            supabase_url = str(st.secrets["SUPABASE_URL"]).strip()
+            supabase_key = str(st.secrets["SUPABASE_KEY"]).strip()
+        elif hasattr(st.secrets, "get"):
+            supabase_url = str(st.secrets.get("SUPABASE_URL", "")).strip()
+            supabase_key = str(st.secrets.get("SUPABASE_KEY", "")).strip()
+        
+        # 외부 설정이 준비되지 않은 상태에서는 조용히 리턴 (Zero-Crash)
+        if not supabase_url or not supabase_key:
+            return
+
+        session_id = st.session_state.get("session_id", "unknown_session")
+
+        payload = {
+            "session_id": session_id,
+            "event_name": event_name,
+            "industry": industry,
+            "target_region": target_region,
+            "target_solution": target_solution,
+            "lead_count": lead_count,
+            "auth_result": auth_result,
+        }
+
+        endpoint = f"{supabase_url.rstrip('/')}/rest/v1/b2b_events"
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+        }
+
+        requests.post(endpoint, json=payload, headers=headers, timeout=2.0)
+    except Exception:
+        # 텔레메트리 전송 실패가 메인 기능을 절대 중단시키지 않음
+        pass
+
+# -------------------------------------------------------------
 # 1. 페이지 기본 설정 & 모던 B2B SaaS 스타일 커스텀 CSS
 # -------------------------------------------------------------
 st.set_page_config(
@@ -23,6 +80,15 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# 세션 식별자 및 최초 방문(session_start) 측정 (브라우저 세션당 1회)
+if "session_id" not in st.session_state:
+    st.session_state["session_id"] = uuid.uuid4().hex
+
+if "session_started" not in st.session_state:
+    st.session_state["session_started"] = True
+    log_event("session_start")
+
 
 st.markdown("""
 <style>
@@ -424,7 +490,7 @@ def generate_excel_bytes(df: pd.DataFrame) -> bytes:
 # -------------------------------------------------------------
 dialog_fn = getattr(st, "dialog", getattr(st, "experimental_dialog", None))
 
-def _render_pro_modal_body(excel_bytes, excel_filename, excel_mime):
+def _render_pro_modal_body(excel_bytes, excel_filename, excel_mime, industry=None, target_region=None, target_solution=None, lead_count=None):
     st.markdown(
         """
         <div style="font-size: 14px; line-height: 1.7; color: #334155; margin-bottom: 16px;">
@@ -452,8 +518,8 @@ def _render_pro_modal_body(excel_bytes, excel_filename, excel_mime):
         key="pro_auth_code_input"
     )
 
-    # 유효한 인증코드 목록 (기본 다중 코드 + st.secrets["AUTH_CODES"] 동적 확장 지원)
-    valid_codes = {"LEAD2026", "PRO7788", "VIP9901"}
+    # 유효한 인증코드 목록: 하드코딩 제거 완료, st.secrets["AUTH_CODES"]로만 관리
+    valid_codes = set()
     try:
         if "AUTH_CODES" in st.secrets:
             secret_codes = st.secrets["AUTH_CODES"]
@@ -467,9 +533,42 @@ def _render_pro_modal_body(excel_bytes, excel_filename, excel_mime):
     is_authed = st.session_state.get("is_pro_authenticated", False)
 
     if code_input:
-        if code_input.strip() in valid_codes:
-            st.session_state["is_pro_authenticated"] = True
-            is_authed = True
+        cleaned_input = code_input.strip()
+        input_hash = hashlib.sha256(cleaned_input.encode("utf-8")).hexdigest()
+        last_checked_hash = st.session_state.get("_last_checked_auth_hash", None)
+        # rerun 시 동일 코드의 중복 로깅 방지: 입력 해시값이 새로워졌을 때만 이벤트 발송
+        if input_hash != last_checked_hash:
+            st.session_state["_last_checked_auth_hash"] = input_hash
+            log_event(
+                "auth_attempt",
+                industry=industry,
+                target_region=target_region,
+                target_solution=target_solution,
+                lead_count=lead_count
+            )
+            if valid_codes and cleaned_input in valid_codes:
+                st.session_state["is_pro_authenticated"] = True
+                is_authed = True
+                log_event(
+                    "auth_success",
+                    industry=industry,
+                    target_region=target_region,
+                    target_solution=target_solution,
+                    lead_count=lead_count,
+                    auth_result="SUCCESS"
+                )
+                st.success("✅ 인증이 완료되었습니다! 아래 버튼을 눌러 엑셀 파일을 다운로드하세요.")
+            else:
+                log_event(
+                    "auth_fail",
+                    industry=industry,
+                    target_region=target_region,
+                    target_solution=target_solution,
+                    lead_count=lead_count,
+                    auth_result="FAIL"
+                )
+                st.error("인증코드가 올바르지 않습니다. 오픈채팅으로 문의해주세요.")
+        elif is_authed:
             st.success("✅ 인증이 완료되었습니다! 아래 버튼을 눌러 엑셀 파일을 다운로드하세요.")
         else:
             st.error("인증코드가 올바르지 않습니다. 오픈채팅으로 문의해주세요.")
@@ -482,17 +581,20 @@ def _render_pro_modal_body(excel_bytes, excel_filename, excel_mime):
             mime=excel_mime,
             type="primary",
             use_container_width=True,
-            key="pro_modal_actual_download_btn"
+            key="pro_modal_actual_download_btn",
+            on_click=log_event,
+            args=("excel_download", industry, target_region, target_solution, lead_count)
         )
 
 if dialog_fn:
     @dialog_fn("🔒 프로 멤버십 전용 기능 (엑셀 일괄 다운로드)")
-    def show_pro_excel_modal(excel_bytes, excel_filename, excel_mime):
-        _render_pro_modal_body(excel_bytes, excel_filename, excel_mime)
+    def show_pro_excel_modal(excel_bytes, excel_filename, excel_mime, industry=None, target_region=None, target_solution=None, lead_count=None):
+        _render_pro_modal_body(excel_bytes, excel_filename, excel_mime, industry=industry, target_region=target_region, target_solution=target_solution, lead_count=lead_count)
 else:
-    def show_pro_excel_modal(excel_bytes, excel_filename, excel_mime):
+    def show_pro_excel_modal(excel_bytes, excel_filename, excel_mime, industry=None, target_region=None, target_solution=None, lead_count=None):
         with st.expander("🔒 프로 멤버십 전용 기능 (엑셀 일괄 다운로드)", expanded=True):
-            _render_pro_modal_body(excel_bytes, excel_filename, excel_mime)
+            _render_pro_modal_body(excel_bytes, excel_filename, excel_mime, industry=industry, target_region=target_region, target_solution=target_solution, lead_count=lead_count)
+
 
 # -------------------------------------------------------------
 # 3-1. Gemini 유효 모델 자동 감지 헬퍼 함수
@@ -1087,6 +1189,12 @@ search_btn = st.button("🚀 잠재고객 분석 및 피칭 생성", type="prima
 # 6. 검색 및 AI 분석 파이프라인 실행 (하이브리드: 네이버 플레이스 직접 수집 + Gemini 경량 AI 피칭)
 # -------------------------------------------------------------
 if search_btn:
+    log_event(
+        "search_attempt",
+        industry=industry.strip() if industry else None,
+        target_region=target_region.strip() if target_region else None,
+        target_solution=target_solution
+    )
     lead_results = []
     
     # 1) Mock 모드 우선 분기
@@ -1123,7 +1231,24 @@ if search_btn:
             
     # 세션에 결과 저장하여 탭 이동 및 렌더링 유지
     st.session_state["lead_results"] = lead_results
-    st.success(f"총 {len(lead_results)}건의 네이버 플레이스 실시간 잠재고객 분석 및 콜드 피칭이 생성되었습니다!")
+    if lead_results:
+        log_event(
+            "search_success",
+            industry=industry.strip() if industry else None,
+            target_region=target_region.strip() if target_region else None,
+            target_solution=target_solution,
+            lead_count=len(lead_results)
+        )
+        st.success(f"총 {len(lead_results)}건의 네이버 플레이스 실시간 잠재고객 분석 및 콜드 피칭이 생성되었습니다!")
+    else:
+        log_event(
+            "search_fail",
+            industry=industry.strip() if industry else None,
+            target_region=target_region.strip() if target_region else None,
+            target_solution=target_solution,
+            lead_count=0
+        )
+        st.warning("⚠️ 검색 결과를 가져오지 못했습니다. 업종 또는 지역을 확인해주세요.")
 
 # -------------------------------------------------------------
 # 7. 결과 화면 탭 뷰 (카드 뷰 vs 테이블 뷰)
@@ -1172,7 +1297,10 @@ if results:
                 mime=excel_mime,
                 type="primary",
                 use_container_width=True,
-                help="PRO 인증이 완료되어 클릭 즉시 12개 실무 CRM 컬럼 .xlsx 보고서가 다운로드됩니다."
+                key="top_pro_excel_download_btn",
+                help="PRO 인증이 완료되어 클릭 즉시 12개 실무 CRM 컬럼 .xlsx 보고서가 다운로드됩니다.",
+                on_click=log_event,
+                args=("excel_download", clean_industry, clean_region, target_solution, len(results) if results else None)
             )
         else:
             if st.button(
@@ -1181,7 +1309,17 @@ if results:
                 use_container_width=True,
                 help="프로 멤버십 전용 기능입니다. 클릭 시 이용권 안내 및 인증코드 입력 팝업이 열립니다."
             ):
-                show_pro_excel_modal(excel_bytes, excel_filename, excel_mime)
+                log_event(
+                    "pro_modal_open",
+                    industry=clean_industry,
+                    target_region=clean_region,
+                    target_solution=target_solution,
+                    lead_count=len(results) if results else None
+                )
+                show_pro_excel_modal(
+                    excel_bytes, excel_filename, excel_mime,
+                    industry=clean_industry, target_region=clean_region, target_solution=target_solution, lead_count=len(results) if results else None
+                )
 
     st.write("")
     tab1, tab2 = st.tabs(["📇 카드 뷰 (채널별 피칭 3종 & 상세 분석)", "📊 CRM 테이블 뷰 (실무 관리 시트)"])
@@ -1288,7 +1426,9 @@ if results:
                 file_name=excel_filename,
                 mime=excel_mime,
                 type="secondary",
-                key="bottom_excel_download_btn"
+                key="bottom_excel_download_btn",
+                on_click=log_event,
+                args=("excel_download", clean_industry, clean_region, target_solution, len(results) if results else None)
             )
         else:
             if st.button(
@@ -1296,7 +1436,17 @@ if results:
                 type="secondary",
                 key="bottom_excel_download_btn"
             ):
-                show_pro_excel_modal(excel_bytes, excel_filename, excel_mime)
+                log_event(
+                    "pro_modal_open",
+                    industry=clean_industry,
+                    target_region=clean_region,
+                    target_solution=target_solution,
+                    lead_count=len(results) if results else None
+                )
+                show_pro_excel_modal(
+                    excel_bytes, excel_filename, excel_mime,
+                    industry=clean_industry, target_region=clean_region, target_solution=target_solution, lead_count=len(results) if results else None
+                )
 else:
     # 최초 진입 시 안내 화면
     st.info("💡 위 설정창에서 타깃 조건(업종, 지역, 제공 서비스)을 확인한 뒤 **'🚀 잠재고객 분석 및 피칭 생성'** 버튼을 클릭해보세요. 네이버 플레이스에서 실제 매장 5곳의 지표를 즉각 수집합니다.")
