@@ -9,9 +9,9 @@ import streamlit as st
 import pandas as pd
 import requests
 
-# google-generativeai 패키지 안전 임포트
+# google-genai 최신 패키지 안전 임포트
 try:
-    import google.generativeai as genai
+    from google import genai
     HAS_GENAI = True
 except ImportError:
     HAS_GENAI = False
@@ -224,6 +224,29 @@ st.markdown("""
         font-size: 12px;
         font-weight: 500;
     }
+    .badge-fact-yes {
+        background: #f0fdf4;
+        color: #15803d;
+        border: 1px solid #bbf7d0;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 11.5px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        text-decoration: none;
+    }
+    .badge-fact-no {
+        background: #f8fafc;
+        color: #64748b;
+        border: 1px solid #e2e8f0;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 11.5px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+    }
     
     /* 결핍 진단 박스 */
     .vuln-box {
@@ -262,17 +285,23 @@ MOCK_LEADS = [
         "link": "",
         "place_url": "https://m.place.naver.com",
         "has_website": False,
+        "homepage_url": None,
+        "instagram_url": None,
+        "has_talktalk": False,
+        "talktalk_url": None,
+        "menu_count": 0,
+        "has_price_info": False,
         "visitor_reviews": 86,
         "blog_reviews": 42,
         "has_booking": False,
         "rating": 4.8,
         "review_count": 86,
-        "vulnerability": "방문자 리뷰 86개로 강남권 상권 내 양호한 검색 유입을 확보하고 있으나, 네이버 간편 예약 및 인스타그램 연동 접점이 미비하여 모바일 탐색 고객의 방문 전환 경로 진단 시 이탈 가설이 도출됩니다. 특히 야간 직장인들의 상담 문의가 카카오톡 수기 응대에 묶여 즉각적 확정이 지연되는 흐름이 관측됩니다. 실시간 예약 파이프라인 보강 시 전환율의 뚜렷한 개선 여지가 있습니다.",
+        "vulnerability": "방문자 리뷰 86개로 상권 내 검색 유입은 발생하고 있으나, 네이버 플레이스 기준 공식 홈페이지 및 인스타그램 링크가 미등록되어 있으며 네이버 간편 예약과 톡톡 상담 접점이 미연동 상태입니다. 온라인상에서 가격 정보 또한 미확인되어 심야/주말 탐색 고객의 방문 전환 경로에서 이탈 가설이 도출됩니다.",
         "priority_score": 94,
-        "pitch_fact": "대표님, 방문자 리뷰 86건의 유입 트래픽 중 예약 부재로 이탈하는 야간 직장인 문의를 실시간 간편 예약 시스템으로 즉각 흡수하는 구조를 제안드립니다.",
+        "pitch_fact": "대표님, 네이버 플레이스 방문 트래픽 중 예약과 톡톡 부재로 이탈하는 고객 문의를 실시간 간편 예약 및 상담 파이프라인으로 흡수하는 안을 제안드립니다.",
         "pitch_partner": "대표님 안녕하십니까. 귀사의 우수한 플레이스 인지도를 기반으로 모바일 예약 전환과 신규 체험 상담을 2배 높일 수 있는 맞춤 진단 리포트를 무상으로 공유해 드리고자 합니다.",
-        "pitch_dm": "원장님 안녕하세요! 센터 인테리어와 후기가 너무 좋아서 피드 눈여겨보고 있었습니다 😊 최근 네이버나 인스타를 통한 신규 상담 전환은 원활하신가요? 동종 업계 반응 좋았던 실무 팁을 가볍게 나누고 싶습니다!",
-        "cold_pitch": "대표님, 방문자 리뷰 86건의 유입 트래픽 중 예약 부재로 이탈하는 야간 직장인 문의를 실시간 간편 예약 시스템으로 즉각 흡수하는 구조를 제안드립니다."
+        "pitch_dm": "원장님 안녕하세요! 센터 인테리어와 후기가 너무 좋아서 눈여겨보고 있었습니다 😊 최근 네이버를 통한 신규 상담 전환은 원활하신가요? 동종 업계 반응 좋았던 실무 팁을 가볍게 나누고 싶습니다!",
+        "cold_pitch": "대표님, 네이버 플레이스 방문 트래픽 중 예약과 톡톡 부재로 이탈하는 고객 문의를 실시간 간편 예약 및 상담 파이프라인으로 흡수하는 안을 제안드립니다."
     },
     {
         "id": "2",
@@ -283,17 +312,23 @@ MOCK_LEADS = [
         "link": "https://instagram.com/moment_seongsu",
         "place_url": "https://m.place.naver.com",
         "has_website": True,
+        "homepage_url": None,
+        "instagram_url": "https://instagram.com/moment_seongsu",
+        "has_talktalk": True,
+        "talktalk_url": "https://talk.naver.com/sample2",
+        "menu_count": 8,
+        "has_price_info": True,
         "visitor_reviews": 210,
         "blog_reviews": 130,
         "has_booking": False,
         "rating": 4.6,
         "review_count": 210,
-        "vulnerability": "블로그 리뷰 130개 및 주말 방문객 인지도는 매우 우수하나, 인근 지식산업센터 120여 개 기업을 타깃으로 하는 오피스 원두 B2B 정기구독 및 케이터링 랜딩 접점이 부재합니다. 현재의 개인 고객 중심 유입을 평일 고정적인 법인 정기 납품 매출로 락인(Lock-in)할 수 있는 채널 확장이 요구됩니다. 간편 법인 견적 및 납품 자동화 파이프라인 구축 시 객단가 상승이 기대됩니다.",
+        "vulnerability": "블로그 리뷰 130개 및 인스타그램 공식 연동으로 탄탄한 인지도를 갖추고 있으나, 네이버 플레이스 기준 공식 홈페이지(자사몰) 링크가 미등록되어 있어 인근 기업 대상의 B2B 원두 정기구독 및 오피스 납품 전용 접점이 분산되는 흐름이 관측됩니다.",
         "priority_score": 88,
-        "pitch_fact": "대표님, 성수 핫플레이스 인지도를 기반으로 인근 120개 오피스를 겨냥한 B2B 원두 정기구독 및 납품 수주 파이프라인 구축을 제안드립니다.",
+        "pitch_fact": "대표님, 성수 로스터리 인지도를 기반으로 인근 120개 오피스를 겨냥한 B2B 원두 정기구독 및 납품 수주 파이프라인 구축을 제안드립니다.",
         "pitch_partner": "대표님 안녕하십니까. 귀사의 프리미엄 원두 브랜딩을 오피스 정기 납품 시장으로 확장하여 평일 고정 매출을 창출하는 B2B 전략 리포트를 무상 전달드리고자 연락드렸습니다.",
         "pitch_dm": "대표님 안녕하세요! 원두 라인업과 피드 감성이 너무 매력적이어서 오래 지켜보고 있었습니다 ☕ 혹시 인근 기업 오피스 구독이나 B2B 납품 문의도 활발하신가요? 유용한 B2B 확장 사례를 공유해드리고 싶어요!",
-        "cold_pitch": "대표님, 성수 핫플레이스 인지도를 기반으로 인근 120개 오피스를 겨냥한 B2B 원두 정기구독 및 납품 수주 파이프라인 구축을 제안드립니다."
+        "cold_pitch": "대표님, 성수 로스터리 인지도를 기반으로 인근 120개 오피스를 겨냥한 B2B 원두 정기구독 및 납품 수주 파이프라인 구축을 제안드립니다."
     },
     {
         "id": "3",
@@ -304,12 +339,18 @@ MOCK_LEADS = [
         "link": "",
         "place_url": "https://m.place.naver.com",
         "has_website": False,
+        "homepage_url": None,
+        "instagram_url": None,
+        "has_talktalk": False,
+        "talktalk_url": None,
+        "menu_count": 4,
+        "has_price_info": True,
         "visitor_reviews": 42,
         "blog_reviews": 15,
         "has_booking": False,
         "rating": 4.5,
         "review_count": 42,
-        "vulnerability": "방문자 리뷰 42개로 핵심 상권 내 초기 신뢰도 형성은 진행 중이나, 스마트블록 키워드 장악력과 플레이스 혜택 쿠폰 경로가 다소 미흡하여 탐색 고객의 방문 전환율 진단 시 개선 여지가 큽니다. 인근 직장인 타깃의 '거북목·체형교정' 전용 검색 유입 장치와 즉시 예약 파이프라인 보강이 권장됩니다. 모바일 지도 탐색에서 실제 체험으로 직결되는 전환 트리거가 필요합니다.",
+        "vulnerability": "방문자 리뷰 42개 및 등록 메뉴 4개의 가격이 정상 노출되어 있으나, 네이버 플레이스 기준 공식 홈페이지 및 인스타그램 링크가 미등록되어 있으며 네이버 간편 예약이 미연동 상태입니다. 탐색 고객을 즉각적인 체험 방문으로 연결하는 모바일 전환 트리거 보강이 권장됩니다.",
         "priority_score": 92,
         "pitch_fact": "대표님, 강남구청역 직장인 타깃의 '체형교정' 스마트블록 최적화와 모바일 간편 예약 연동으로 주간 신규 체험 전환 15건을 달성하는 안을 제안드립니다.",
         "pitch_partner": "대표님 안녕하십니까. 강남구청역 상권 경쟁 속에서 신규 회원 유치 단가를 낮추고 체험 예약율을 극대화할 수 있는 플레이스 최적화 진단 리포트를 무상으로 보내드리고자 합니다.",
@@ -325,12 +366,18 @@ MOCK_LEADS = [
         "link": "https://velvetmood.kr",
         "place_url": "https://m.place.naver.com",
         "has_website": True,
+        "homepage_url": "https://velvetmood.kr",
+        "instagram_url": "https://instagram.com/velvetmood_cafe",
+        "has_talktalk": True,
+        "talktalk_url": "https://talk.naver.com/sample4",
+        "menu_count": 12,
+        "has_price_info": True,
         "visitor_reviews": 14,
         "blog_reviews": 28,
         "has_booking": True,
         "rating": 4.3,
         "review_count": 14,
-        "vulnerability": "네이버 예약 시스템은 선제적으로 구축되었으나 영수증 리뷰가 14건으로 초기 형성 단계여서 모바일 스마트블록 상위 점유 및 방문 신뢰도 확보에 가설적 병목이 존재합니다. 온라인 자사몰 방문 고객을 오프라인 매장 방문 및 네이버 단골 저장으로 연결하는 크로스 프로모션 장치가 요구됩니다. 디지털 유입 고객의 현장 발걸음을 이끄는 브릿지 설계가 유효합니다.",
+        "vulnerability": "공식 홈페이지, 인스타그램, 네이버 예약 및 톡톡까지 풀 패키지 채널을 확보하고 있으나, 영수증 리뷰가 14건으로 초기 단계여서 검색 상위 점유를 위한 방문자 후기 활성화 및 단골 고객 락인(Lock-in) 이벤트 장치가 보강될 필요가 있습니다.",
         "priority_score": 75,
         "pitch_fact": "대표님, 온라인 자사몰 방문자를 오프라인 매장 방문 및 단골 저장으로 직결시키는 스마트 쿠폰 연동 시스템 도입을 제안드립니다.",
         "pitch_partner": "대표님 안녕하십니까. 귀사 브랜드의 온라인 유입 트래픽을 오프라인 매장 방문 및 재구매로 연결하는 전환 최적화 리포트를 무상으로 공유해 드리고자 합니다.",
@@ -346,16 +393,22 @@ MOCK_LEADS = [
         "link": "",
         "place_url": "https://m.place.naver.com",
         "has_website": False,
+        "homepage_url": None,
+        "instagram_url": None,
+        "has_talktalk": False,
+        "talktalk_url": None,
+        "menu_count": 0,
+        "has_price_info": False,
         "visitor_reviews": 130,
         "blog_reviews": 85,
         "has_booking": False,
         "rating": 4.9,
         "review_count": 130,
-        "vulnerability": "방문자 리뷰 130건과 자이로토닉 특화 전문성을 바탕으로 기존 고객 만족도는 높으나, 대치동 학부모 및 직장인을 겨냥한 1:1 프라이빗 패키지 전용 랜딩 접점과 SNS 숏폼 채널 관리가 미흡합니다. 입소문에만 의존하던 기존 구조를 디지털 자동화 상담 및 고단가 회원 락인(Lock-in) 시스템으로 전환할 필요가 있습니다. 체계적인 온라인 신청 파이프라인 도입 시 안정적 고수익 구조 확립이 가능합니다.",
+        "vulnerability": "방문자 리뷰 130건으로 높은 신뢰도를 갖추었으나, 네이버 플레이스 기준 공식 홈페이지 및 인스타그램 링크가 미등록 상태이며 가격 정보 또한 온라인상에서 미확인됩니다. 대치 상권의 프라이빗 수요를 고려할 때 온라인 비대면 가격 및 상세 안내 파이프라인 정비가 유효합니다.",
         "priority_score": 95,
         "pitch_fact": "대표님, 대치동 학부모 타깃의 '청소년 체형교정 & 자이로토닉' 고단가 프라이빗 세션 전용 랜딩페이지 및 자동 상담 시스템을 제안드립니다.",
         "pitch_partner": "대표님 안녕하십니까. 귀사의 차별화된 자이로토닉 프로그램을 기반으로 고단가 VIP 고객 유치를 자동화하는 프라이빗 마케팅 진단 리포트를 무상 제공해 드리고자 합니다.",
-        "pitch_dm": "원장님 안녕하세요! 자이로토닉 전문 강사진 피드가 정말 전문적이고 멋지네요 👍 대치 상권에서 고단가 정기 세션 문의를 비약적으로 늘린 사례가 있어 가볍게 인사드립니다!",
+        "pitch_dm": "원장님 안녕하세요! 자이로토닉 전문 강사진 후기가 정말 좋네요 👍 대치 상권에서 고단가 정기 세션 문의를 비약적으로 늘린 사례가 있어 가볍게 인사드립니다!",
         "cold_pitch": "대표님, 대치동 학부모 타깃의 '청소년 체형교정 & 자이로토닉' 고단가 프라이빗 세션 전용 랜딩페이지 및 자동 상담 시스템을 제안드립니다."
     }
 ]
@@ -411,31 +464,42 @@ def search_naver_places(client_id: str, client_secret: str, query: str, display:
 
 def generate_excel_bytes(df: pd.DataFrame) -> bytes:
     """pandas DataFrame을 실무 영업 CRM 시트 스타일의 고품질 .xlsx 바이너리로 변환
-    (12개 영업 CRM 컬럼 규격: 우선순위점수, 상호명, 업종, 전화번호, 주소, AI 진단 요약, 팩트 제안, 정중한 제안, DM 제안, 연락 일자, 영업 결과, 비고)"""
+    (영업 우선순위, 상호명, 업종, 전화번호, 주소, 네이버 플레이스 팩트 5종, AI 진단 요약, 3종 피칭 문구 등)"""
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name="B2B_영업CRM_리드목록")
         worksheet = writer.sheets["B2B_영업CRM_리드목록"]
         
-        # 1. 12개 영업 CRM 컬럼 너비(Width) 지정
-        col_widths = {
-            "A": 14,  # 우선순위점수
-            "B": 25,  # 상호명
-            "C": 15,  # 업종
-            "D": 26,  # 전화번호
-            "E": 36,  # 주소
-            "F": 52,  # AI 진단 요약
-            "G": 46,  # 팩트 제안 문구
-            "H": 46,  # 정중한 제안 문구
-            "I": 46,  # DM 제안 문구
-            "J": 15,  # 연락 일자
-            "K": 26,  # 영업 결과(부재/거절/상담예정/미팅성사)
-            "L": 32,  # 비고 및 메모
+        # 1. 컬럼별 맞춤 너비(Width) 정의
+        col_width_defaults = {
+            "우선순위점수": 14,
+            "상호명": 25,
+            "업종": 16,
+            "전화번호": 26,
+            "주소": 36,
+            "홈페이지 링크": 32,
+            "인스타그램 링크": 32,
+            "네이버 톡톡": 14,
+            "메뉴 등록 수": 14,
+            "가격 정보 여부": 22,
+            "네이버 예약": 14,
+            "방문자 리뷰": 14,
+            "블로그 리뷰": 14,
+            "AI 진단 요약": 52,
+            "팩트 제안 문구": 46,
+            "정중한 제안 문구": 46,
+            "DM 제안 문구": 46,
+            "연락 일자": 15,
+            "영업 결과(부재/거절/상담예정/미팅성사)": 26,
+            "비고 및 메모": 32,
         }
-        for col_letter, width in col_widths.items():
-            worksheet.column_dimensions[col_letter].width = width
+        for col_idx, col_name in enumerate(df.columns, start=1):
+            letter = get_column_letter(col_idx)
+            w = col_width_defaults.get(col_name, 20)
+            worksheet.column_dimensions[letter].width = w
 
         # 2. 테두리 스타일 정의 (라이트 그레이 #D9D9D9)
         thin_border = Border(
@@ -461,21 +525,19 @@ def generate_excel_bytes(df: pd.DataFrame) -> bytes:
 
         # 4. 본문 데이터 서식 (2행부터: 상하 중앙 정렬, 컬럼별 맞춤 정렬, 자동 줄바꿈, 92pt 넉넉한 행 높이)
         body_font = Font(name="맑은 고딕", size=10)
-        # A(1), C(3), D(4), J(10), K(11) -> 가운데 정렬
-        center_col_indices = {1, 3, 4, 10, 11}
-        # B(2), E(5), F(6), G(7), H(8), I(9), L(12) -> 긴 텍스트 줄바꿈 및 좌측 정렬
-        wrap_col_indices = {2, 5, 6, 7, 8, 9, 12}
+        center_col_names = {"우선순위점수", "업종", "전화번호", "네이버 톡톡", "메뉴 등록 수", "가격 정보 여부", "네이버 예약", "방문자 리뷰", "블로그 리뷰", "연락 일자", "영업 결과(부재/거절/상담예정/미팅성사)"}
+        wrap_col_names = {"상호명", "주소", "홈페이지 링크", "인스타그램 링크", "AI 진단 요약", "팩트 제안 문구", "정중한 제안 문구", "DM 제안 문구", "비고 및 메모"}
 
         max_row = worksheet.max_row
         for row_idx in range(2, max_row + 1):
             worksheet.row_dimensions[row_idx].height = 92  # 3가지 피칭 및 심층 진단 여백 확보
-            for col_idx in range(1, total_cols + 1):
+            for col_idx, col_name in enumerate(df.columns, start=1):
                 cell = worksheet.cell(row=row_idx, column=col_idx)
                 cell.font = body_font
                 cell.border = thin_border
                 
-                is_center = col_idx in center_col_indices
-                is_wrap = col_idx in wrap_col_indices
+                is_center = col_name in center_col_names
+                is_wrap = col_name in wrap_col_names
                 
                 cell.alignment = Alignment(
                     horizontal="center" if is_center else "left",
@@ -600,22 +662,25 @@ else:
 # 3-1. Gemini 유효 모델 자동 감지 헬퍼 함수
 # -------------------------------------------------------------
 def get_available_models(api_key: str) -> list:
-    """genai.configure 직후 genai.list_models()를 조회하여 'generateContent'를 지원하는 표준 유효 모델 목록 추출
+    """genai.Client(api_key=api_key).models.list()를 조회하여 'generateContent'를 지원하는 표준 유효 모델 목록 추출
     (쿼터 제한이 극심한 omni, preview, experimental 등은 완전 제외)"""
     if not HAS_GENAI or not api_key:
         return []
     try:
-        genai.configure(api_key=api_key)
+        client = genai.Client(api_key=api_key)
         # 쿼터 초과 및 불안정을 유발하는 프리뷰/실험 모델 키워드 필터링
         EXCLUDE_KEYWORDS = ["omni", "preview", "experimental", "exp", "thinking"]
         
         valid_models = []
-        for m in genai.list_models():
-            if 'generateContent' in getattr(m, 'supported_generation_methods', []):
-                name_lower = m.name.lower()
+        for m in client.models.list():
+            actions = getattr(m, 'supported_actions', getattr(m, 'supported_generation_methods', [])) or []
+            if 'generateContent' in actions:
+                m_name = m.name or ""
+                clean_name = m_name.replace("models/", "")
+                name_lower = clean_name.lower()
                 if any(k in name_lower for k in EXCLUDE_KEYWORDS):
                     continue
-                valid_models.append(m.name)
+                valid_models.append(clean_name)
         return valid_models
     except Exception:
         return []
@@ -679,10 +744,9 @@ def analyze_lead_with_gemini(api_key: str, lead_data: dict, my_service: str, mod
         }
 
     try:
-        genai.configure(api_key=api_key)
+        client = genai.Client(api_key=api_key)
         # 자동 감지된 최적 모델 선택 (404 Not Found 방지)
         target_model = model_name or resolve_best_model(api_key)
-        model = genai.GenerativeModel(target_model)
 
         prompt = f"""
 당신은 대한민국 상위 1% B2B 콜드 세일즈 및 비즈니스 성장 전략 수석 컨설턴트입니다.
@@ -723,13 +787,17 @@ def analyze_lead_with_gemini(api_key: str, lead_data: dict, my_service: str, mod
         response = None
         try:
             # 1차 시도: JSON 포맷 지정
-            response = model.generate_content(
-                prompt,
-                generation_config={"response_mime_type": "application/json"}
+            response = client.models.generate_content(
+                model=target_model,
+                contents=prompt,
+                config={"response_mime_type": "application/json"}
             )
         except Exception:
             # 2차 시도: 일반 텍스트 포맷 호출 후 정규식 파싱
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(
+                model=target_model,
+                contents=prompt
+            )
 
         raw_text = extract_text_safely(response)
         if not raw_text:
@@ -788,7 +856,7 @@ def crawl_naver_place_leads(region: str, industry: str, limit: int = 5) -> list:
         place_ids = []
 
     leads = []
-    # 2. 각 플레이스 모바일 홈 페이지에서 __APOLLO_STATE__ 및 예약 태그 고속 추출
+    # 2. 각 플레이스 모바일 홈 페이지에서 __APOLLO_STATE__ 및 예약/링크/메뉴 태그 고속 추출
     for pid in place_ids:
         try:
             place_url = f"https://m.place.naver.com/place/{pid}/home"
@@ -802,7 +870,7 @@ def crawl_naver_place_leads(region: str, industry: str, limit: int = 5) -> list:
                 bases = [v for k, v in data.items() if 'DetailBase' in k or k.startswith('PlaceDetailBase:')]
                 if bases:
                     b = bases[0]
-                    # 네이버 간편 예약 활성화 여부 판별
+                    # 1) 네이버 간편 예약 활성화 여부 판별
                     has_booking = bool(
                         f'/place/{pid}/booking' in s or 
                         'plc_btp.booking' in s or 
@@ -821,6 +889,62 @@ def crawl_naver_place_leads(region: str, industry: str, limit: int = 5) -> list:
                     raw_phone = str(b.get('phone') or b.get('virtualPhone') or '').strip()
                     phone = raw_phone if raw_phone and raw_phone not in ["-", "정보 없음"] else "미등록 (네이버톡톡/DM 문의 권장)"
 
+                    # ROOT_QUERY 내 placeDetail 객체 우선 참조 (풀 상세 데이터 확보)
+                    place_detail = {}
+                    root_query = data.get('ROOT_QUERY') or {}
+                    if isinstance(root_query, dict):
+                        for rk, rv in root_query.items():
+                            if rk.startswith('placeDetail(') and isinstance(rv, dict):
+                                place_detail = rv
+                                break
+
+                    # 2) 팩트 1 & 2: 공식 홈페이지 및 인스타그램 링크 방어적 파싱
+                    homepage_url = None
+                    instagram_url = None
+                    homepages_obj = place_detail.get('homepages') or b.get('homepages') or {}
+                    all_hp_items = []
+                    if isinstance(homepages_obj, dict):
+                        repr_hp = homepages_obj.get('repr')
+                        if isinstance(repr_hp, dict):
+                            all_hp_items.append(repr_hp)
+                        etc_hp = homepages_obj.get('etc')
+                        if isinstance(etc_hp, list):
+                            all_hp_items.extend([item for item in etc_hp if isinstance(item, dict)])
+
+                    for hp in all_hp_items:
+                        u = (hp.get('url') or hp.get('landingUrl') or '').strip()
+                        t = (hp.get('type') or hp.get('typeI18n') or '').strip()
+                        if not u or not u.startswith('http'):
+                            continue
+                        # 인스타그램 판별
+                        if not instagram_url and ('인스타그램' in t or 'instagram.com' in u.lower()):
+                            instagram_url = u
+                        # 홈페이지 판별 (블로그, 인스타, 유튜브, 페이스북 제외한 공식 사이트)
+                        elif not homepage_url and ('홈페이지' in t or (t not in ['블로그', '인스타그램', '유튜브', '페이스북'] and not any(x in u.lower() for x in ['instagram.com', 'blog.naver.com', 'youtube.com', 'facebook.com']))):
+                            homepage_url = u
+
+                    # 3) 팩트 3: 네이버 톡톡 실시간 상담 연동 여부 및 URL
+                    raw_talktalk = str(place_detail.get('talktalkUrl') or b.get('talktalkUrl') or '').strip()
+                    talktalk_url = raw_talktalk if raw_talktalk.startswith('http') else None
+                    has_talktalk = bool(talktalk_url)
+
+                    # 4) 팩트 4: 메뉴/서비스 등록 개수 및 가격 정보 노출 여부
+                    menu_items = [v for k, v in data.items() if k.startswith(f'Menu:{pid}_') or (k.startswith('Menu:') and isinstance(v, dict))]
+                    if not menu_items:
+                        ref_menus = place_detail.get('menus') or b.get('menus') or []
+                        for rm in ref_menus:
+                            if isinstance(rm, dict) and '__ref' in rm:
+                                ref_k = rm['__ref']
+                                if ref_k in data and isinstance(data[ref_k], dict):
+                                    menu_items.append(data[ref_k])
+
+                    menu_count = len(menu_items)
+                    # 유효 가격 등록 여부 검증 (가격이 등록되어 있고 빈값, 0, '-'이 아닌 경우)
+                    has_price_info = any(
+                        m.get('price') and str(m.get('price')).strip() not in ['', '0', 'None', '-']
+                        for m in menu_items
+                    )
+
                     leads.append({
                         "id": pid,
                         "title": title,
@@ -830,8 +954,16 @@ def crawl_naver_place_leads(region: str, industry: str, limit: int = 5) -> list:
                         "visitor_reviews": int(b.get('visitorReviewsTotal') or 0),
                         "blog_reviews": int(b.get('cafeBlogReviewsTotal') or 0),
                         "has_booking": has_booking,
+                        "homepage_url": homepage_url,
+                        "has_homepage": bool(homepage_url),
+                        "instagram_url": instagram_url,
+                        "has_instagram": bool(instagram_url),
+                        "talktalk_url": talktalk_url,
+                        "has_talktalk": has_talktalk,
+                        "menu_count": menu_count,
+                        "has_price_info": has_price_info,
                         "place_url": pr.url or f"https://m.place.naver.com/place/{pid}/home",
-                        "link": pr.url or f"https://m.place.naver.com/place/{pid}/home"
+                        "link": homepage_url or instagram_url or pr.url or f"https://m.place.naver.com/place/{pid}/home"
                     })
         except Exception:
             continue
@@ -850,17 +982,23 @@ def analyze_crawled_leads_with_gemini(
         return None, "Gemini API 키가 입력되지 않았습니다."
 
     target_model = model_name or resolve_best_model(api_key)
-    genai.configure(api_key=api_key)
-    
-    # 웹 검색(Grounding) 없이 순수 모델 생성으로 초고속 처리
-    model = genai.GenerativeModel(target_model)
+    try:
+        client = genai.Client(api_key=api_key)
+    except Exception as e:
+        return None, f"Gemini Client 초기화 실패: {e}"
 
     facts_list = []
     for idx, l in enumerate(leads):
         vr = l.get("visitor_reviews", 0)
         br = l.get("blog_reviews", 0)
         has_b = l.get("has_booking", False)
+        hp_url = l.get("homepage_url")
+        insta_url = l.get("instagram_url")
+        has_tt = l.get("has_talktalk", False)
+        m_count = l.get("menu_count", 0)
+        has_price = l.get("has_price_info", False)
         is_large = (vr >= 150 or br >= 50)
+        
         facts_list.append({
             "idx": idx,
             "title": l["title"],
@@ -868,37 +1006,47 @@ def analyze_crawled_leads_with_gemini(
             "address": l["address"],
             "visitor_reviews": vr,
             "blog_reviews": br,
-            "has_booking": "네이버 간편예약 활성화" if has_b else "네이버 간편예약 미연동(부재)",
-            "scale_type": "대형/인기 매장 (고객 유입 풍부)" if is_large else "성장/초기 매장"
+            "scale_type": "대형/인기 매장 (고객 유입 풍부)" if is_large else "성장/일반 매장",
+            "naver_booking": "네이버 간편예약 활성화" if has_b else "네이버 플레이스 기준 간편예약 미연동",
+            "homepage_status": f"공식 홈페이지 등록 ({hp_url})" if hp_url else "네이버 플레이스 기준 공식 홈페이지 링크 미등록",
+            "instagram_status": f"공식 인스타그램 등록 ({insta_url})" if insta_url else "네이버 플레이스 기준 공식 인스타그램 링크 미등록",
+            "talktalk_status": "네이버 톡톡 상담 연동" if has_tt else "네이버 톡톡 미연동",
+            "price_status": f"메뉴/서비스 {m_count}개 등록 (가격 정보 노출)" if has_price else (f"네이버 플레이스에서 가격 정보 미확인 (등록 메뉴 {m_count}개)" if m_count > 0 else "네이버 플레이스 기준 메뉴 및 가격 정보 미확인")
         })
 
     facts_json = json.dumps(facts_list, ensure_ascii=False, indent=2)
 
     prompt = f"""
 당신은 대한민국 최상위 B2B 세일즈 전략 및 비즈니스 전환율 최적화 수석 컨설턴트입니다.
-아래는 네이버 플레이스에서 실시간 수집한 실제 매장 5곳의 팩트 지표 데이터입니다:
+아래는 네이버 플레이스에서 실시간 직접 수집한 실제 매장 5곳의 [확인된 팩트 데이터]입니다:
 
 {facts_json}
 
 나의 제안 솔루션: "{target_solution}"
 
-위 5개 매장의 실제 수치(방문자 리뷰 수, 블로그 리뷰 수, 예약 연동 여부, 매장 규모)를 바탕으로, 각 매장별 [객관적 결핍 진단]과 [3가지 맞춤 피칭 문구]를 작성하세요.
+위 5개 매장의 [확인된 팩트]만을 바탕으로, 각 매장별 [객관적 결핍 진단]과 [3가지 맞춤 피칭 문구]를 작성하세요.
 
 [핵심 작성 원칙 - 절대 엄수]
-1. vulnerability (AI 진단 요약):
-   - [어조 절대 주의]: "~때문에 망합니다", "매출 손실이 심각합니다" 같은 자극적/단정적 어그로성 표현을 완전히 배제하고, "공개 지표 기준 신규 고객 이탈 가설", "온라인 전환 경로 진단", "상담 동선 분석" 등 전문가적이고 객관적인 톤(3~4문장, 150~180자 내외)으로 작성하세요.
-   - [대형/인기 매장 예외 처리]: 리뷰 수가 많거나 상위 노출 중인 매장(scale_type이 '대형/인기 매장')은 "손님이 없다"고 지적하지 말고, "고단가 프리미엄 전환", "수기 상담 자동화", "브랜드 락인(SNS 숏폼 브랜딩/VIP 정기 관리)" 중심의 사업 확장형 가치를 진단하세요.
-   - [SNS 결핍 진단]: 플레이스 연동 인스타그램 및 SNS 숏폼 채널의 부재 또는 최신 비주얼 소통 결핍 가능성을 진단 포인트로 함께 점검하세요.
+1. [확인된 팩트 준수 및 임의 단정 금지]:
+   - 반드시 위 JSON의 [확인된 팩트] 지표(예약 연동 여부, 홈페이지 링크 유무, 인스타그램 링크 유무, 톡톡 연동 여부, 가격 정보 노출 여부, 리뷰 수)에만 근거하여 온라인 고객 접점과 전환 동선을 분석하세요.
+   - [표현 원칙 1]: 홈페이지나 인스타그램이 없는 경우 "홈페이지 없음", "인스타 안 함"이라고 단정하지 말고, 반드시 "네이버 플레이스 기준 공식 홈페이지 링크 미등록", "네이버 플레이스 기준 공식 인스타그램 링크 미등록" 등 확인된 사실만을 명확히 표현하세요.
+   - [표현 원칙 2]: 네이버 톡톡이나 예약이 미연동되어 있더라도 "전화 상담만 받는다"고 단정하지 말고, "모바일 1:1 실시간 톡톡 상담 채널 미연동", "간편 예약 미연동으로 인한 비대면 예약 접점 부재" 수준으로 객관적으로 표현하세요.
+   - [표현 원칙 3]: 가격 정보가 등록되지 않은 경우 "네이버 플레이스에서 가격 정보 미확인으로 인한 사전 탐색 고객의 이탈 가설" 수준으로 진단하세요.
+   - 확인되지 않은 오프라인 내부 사정(서비스 불친절, 직원 부족 등)이나 지어낸 사실을 절대 언급하지 마세요.
 
-2. 3가지 피칭 문구 다변화:
+2. vulnerability (AI 진단 요약):
+   - "~때문에 망합니다", "매출 손실이 심각합니다" 같은 자극적/단정적 어그로성 표현을 완전히 배제하고, "공개 지표 기준 신규 고객 이탈 가설", "온라인 전환 동선 분석", "모바일 상담 접점 진단" 등 전문가적이고 객관적인 톤(3~4문장, 150~180자 내외)으로 작성하세요.
+   - 리뷰 수가 많은 매장(scale_type이 '대형/인기 매장')은 고객 유입이 활발하므로 "손님이 없다"고 지적하지 말고, "고단가 VIP 전환", "수기 상담 자동화", "브랜드 락인(자사몰/VIP 관리)" 중심의 사업 확장형 가치를 진단하세요.
+
+3. 3가지 피칭 문구 다변화:
    1) pitch_fact (팩트 제안형 - 문자/전화용):
-      - 팩트 수치(리뷰 수, 예약 여부 등)를 근거로 핵심 전환 개선안을 짚어주는 명확하고 전문적인 1줄 문장.
+      - 확인된 팩트 지표(예약, 톡톡, 가격 안내, 홈페이지 등)를 근거로 핵심 전환 개선안을 짚어주는 명확하고 전문적인 1줄 문장.
    2) pitch_partner (정중한 파트너형 - 이메일용):
       - 무상 맞춤 진단 리포트 제공 및 파트너십을 제안하는 품격 있고 정중한 문장 (대표님께 거부감 없는 어조).
    3) pitch_dm (인스타 DM형 - SNS용):
       - 가벼운 안부와 칭찬으로 시작하여 질문을 던지는 친근하고 캐주얼한 소통 톤 (이모지 활용).
 
-3. priority_score (영업 우선순위 점수):
+4. priority_score (영업 우선순위 점수):
    - 제안 솔루션 [{target_solution}] 도입을 통해 즉각적인 전환율 상승 및 사업 확장 여지가 클수록 85~98점 부여 (0~100 정수).
 
 [출력 포맷]
@@ -907,22 +1055,26 @@ def analyze_crawled_leads_with_gemini(
   {{
     "idx": 0,
     "priority_score": 92,
-    "vulnerability": "방문자 리뷰 130개와 인지도를 갖추어 기본 유입은 안정적이나, 네이버 간편 예약 미연동 및 SNS 비주얼 소통 창구의 부재로 모바일 탐색 고객의 방문 전환 경로 진단 시 이탈 가설이 도출됩니다. 특히 반복적인 단순 수기 문의를 자동화하고 고단가 회원으로 락인(Lock-in)할 수 있는 확장 파이프라인 보강이 권장됩니다.",
-    "pitch_fact": "대표님, 방문자 리뷰 130건의 탐색 트래픽을 놓치지 않도록 실시간 간편 예약 및 전환 자동화 시스템 도입을 제안드립니다.",
-    "pitch_partner": "대표님 안녕하십니까. 귀사의 탄탄한 인지도를 기반으로 온라인 예약 및 고단가 전환 효율을 높일 수 있는 맞춤 진단 리포트를 무상으로 공유해 드리고자 합니다.",
-    "pitch_dm": "대표님 안녕하세요! 공간이 너무 멋져서 눈여겨보고 있었습니다 😊 최근 네이버나 SNS를 통한 신규 문의 전환은 원활하신가요? 실무 전환 팁을 가볍게 나누고 싶습니다!"
+    "vulnerability": "방문자 리뷰 130개와 인지도를 갖추어 기본 유입은 안정적이나, 네이버 플레이스 기준 공식 홈페이지 링크가 미등록되어 있고 톡톡 실시간 상담이 미연동 상태입니다. 온라인 가격 정보 또한 플레이스상에서 미확인되어 비대면 탐색 고객의 방문 전환 경로 진단 시 이탈 가설이 도출됩니다. 반복 수기 상담을 줄이고 고객 전환을 이끄는 파이프라인 정비가 권장됩니다.",
+    "pitch_fact": "대표님, 방문 트래픽 중 비대면 채널 미등록으로 이탈하는 잠재고객을 실시간 예약 및 상담 파이프라인으로 전환하는 안을 제안드립니다.",
+    "pitch_partner": "대표님 안녕하십니까. 귀사의 우수한 플레이스 인지도를 기반으로 온라인 예약 및 고단가 전환 효율을 높일 수 있는 맞춤 진단 리포트를 무상으로 공유해 드리고자 합니다.",
+    "pitch_dm": "대표님 안녕하세요! 공간이 너무 멋져서 눈여겨보고 있었습니다 😊 최근 네이버나 모바일을 통한 신규 문의 전환은 원활하신가요? 실무 전환 팁을 가볍게 나누고 싶습니다!"
   }}
 ]
 """
     try:
         response = None
         try:
-            response = model.generate_content(
-                prompt,
-                generation_config={"response_mime_type": "application/json"}
+            response = client.models.generate_content(
+                model=target_model,
+                contents=prompt,
+                config={"response_mime_type": "application/json"}
             )
         except Exception:
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(
+                model=target_model,
+                contents=prompt
+            )
 
         raw_text = extract_text_safely(response)
         if not raw_text:
@@ -954,6 +1106,11 @@ def analyze_crawled_leads_with_gemini(
             vr = lead.get("visitor_reviews", 0)
             br = lead.get("blog_reviews", 0)
             has_b = lead.get("has_booking", False)
+            hp_url = lead.get("homepage_url")
+            insta_url = lead.get("instagram_url")
+            has_tt = lead.get("has_talktalk", False)
+            m_count = lead.get("menu_count", 0)
+            has_price = lead.get("has_price_info", False)
             is_large = (vr >= 150 or br >= 50)
 
             if match_ai:
@@ -964,14 +1121,25 @@ def analyze_crawled_leads_with_gemini(
                 p_dm = match_ai.get("pitch_dm", "")
             else:
                 score = 92 if not has_b else 80
+                missing_channels = []
+                if not hp_url:
+                    missing_channels.append("공식 홈페이지 링크 미등록")
+                if not insta_url:
+                    missing_channels.append("인스타그램 링크 미등록")
+                if not has_tt:
+                    missing_channels.append("네이버 톡톡 미연동")
+                if not has_price:
+                    missing_channels.append("가격 정보 미확인")
+                ch_desc = ", ".join(missing_channels[:2]) if missing_channels else "상세 안내 채널 보강 필요"
+
                 if is_large:
-                    vuln = f"방문자 리뷰 {vr}개와 블로그 리뷰 {br}개로 상권 내 탄탄한 브랜드 인지도를 확보하고 있으나, 수기 상담 의존도가 높고 SNS 숏폼 채널 연계가 부족하여 고단가 고객 락인(Lock-in) 및 예약 자동화 관점에서 추가 성장 여지가 진단됩니다."
+                    vuln = f"방문자 리뷰 {vr}개로 상권 내 탄탄한 브랜드 인지도를 확보하고 있으나, 네이버 플레이스 기준 {ch_desc} 상태로 확인되어 고단가 고객 락인(Lock-in) 및 비대면 상담 자동화 관점에서 추가적인 접점 확장이 권장됩니다."
                     p_fact = f"대표님, {lead['title']}의 높은 방문 트래픽을 고단가 정기 고객으로 락인하고 상담을 자동화하는 {target_solution} 구축을 제안드립니다."
-                    p_partner = f"대표님 안녕하십니까. 귀사의 우수한 플레이스 인지도를 바탕으로 상담 리소스를 50% 절감하고 VIP 전환율을 높이는 맞춤 리포트를 무상 제공해 드리고자 합니다."
-                    p_dm = f"대표님 안녕하세요! {lead['title']} 인지도와 리뷰 평판이 너무 좋아 평소 관심 있게 지켜보고 있었습니다 ✨ 최근 예약 관리 및 고단가 고객 유입 동선은 만족스러우신가요?"
+                    p_partner = f"대표님 안녕하십니까. 귀사의 우수한 플레이스 인지도를 바탕으로 상담 리소스를 절감하고 VIP 전환율을 높이는 맞춤 리포트를 무상 제공해 드리고자 합니다."
+                    p_dm = f"대표님 안녕하세요! {lead['title']} 인지도와 리뷰 평판이 너무 좋아 평소 관심 있게 지켜보고 있었습니다 ✨ 최근 온라인 예약 및 신규 고객 유입 동선은 만족스러우신가요?"
                 else:
-                    vuln = f"방문자 리뷰 {vr}개로 지역 검색 유입은 발생하고 있으나, 네이버 간편 예약 미연동 및 SNS 비주얼 소통 접점 부재로 모바일 탐색 고객의 실제 방문 전환 경로 진단 시 이탈 가설이 도출됩니다. 직관적인 예약 및 혜택 파이프라인 보강이 요구됩니다."
-                    p_fact = f"대표님, {lead['title']}의 방문자 리뷰 {vr}개 유입 중 전환 장치 부재로 분산되는 잠재 고객을 {target_solution} 도입으로 즉각 흡수해 드립니다."
+                    vuln = f"방문자 리뷰 {vr}개로 지역 검색 유입은 발생하고 있으나, 네이버 플레이스 기준 {ch_desc} 및 간편예약 미연동으로 모바일 탐색 고객의 실제 방문 전환 경로 진단 시 이탈 가설이 도출됩니다. 직관적인 상담 및 신청 파이프라인 보강이 요구됩니다."
+                    p_fact = f"대표님, {lead['title']}의 방문자 리뷰 {vr}개 유입 중 비대면 전환 장치 부재로 분산되는 잠재 고객을 {target_solution} 도입으로 즉각 흡수해 드립니다."
                     p_partner = f"대표님 안녕하십니까. {lead['title']}의 지역 플레이스 인지도를 바탕으로 온라인 예약 및 고객 전환율을 극대화하는 맞춤 진단 리포트를 무상 전달드리고자 합니다."
                     p_dm = f"대표님 안녕하세요! {lead['title']} 공간이 정말 매력적이어서 피드 구경하다 인사드려요 😊 최근 온라인 채널을 통한 신규 고객 문의는 원활하신가요?"
 
@@ -984,6 +1152,14 @@ def analyze_crawled_leads_with_gemini(
                 "visitor_reviews": vr,
                 "blog_reviews": br,
                 "has_booking": has_b,
+                "homepage_url": hp_url,
+                "has_homepage": bool(hp_url),
+                "instagram_url": insta_url,
+                "has_instagram": bool(insta_url),
+                "talktalk_url": lead.get("talktalk_url"),
+                "has_talktalk": has_tt,
+                "menu_count": m_count,
+                "has_price_info": has_price,
                 "place_url": lead.get("place_url", ""),
                 "priority_score": score,
                 "vulnerability": vuln,
@@ -999,29 +1175,45 @@ def analyze_crawled_leads_with_gemini(
         return None, str(e)
 
 def enrich_leads_rule_based(leads: list, target_solution: str) -> list:
-    """Gemini API가 없거나 오류 시, 수집된 팩트 데이터를 기반으로 3종 맞춤 피칭 및 객관적 결핍 진단 합성"""
+    """Gemini API가 없거나 오류 시, 수집된 4종 팩트 데이터를 기반으로 사실에 입각한 3종 맞춤 피칭 및 객관적 결핍 진단 합성"""
     results = []
     for idx, l in enumerate(leads):
         has_b = l.get("has_booking", False)
         vr = l.get("visitor_reviews", 0)
         br = l.get("blog_reviews", 0)
+        hp_url = l.get("homepage_url")
+        insta_url = l.get("instagram_url")
+        has_tt = l.get("has_talktalk", False)
+        m_count = l.get("menu_count", 0)
+        has_price = l.get("has_price_info", False)
         is_large = (vr >= 150 or br >= 50)
         score = 94 if not has_b and vr >= 30 else (88 if not has_b else 78)
+
+        missing_channels = []
+        if not hp_url:
+            missing_channels.append("공식 홈페이지 링크 미등록")
+        if not insta_url:
+            missing_channels.append("인스타그램 링크 미등록")
+        if not has_tt:
+            missing_channels.append("네이버 톡톡 미연동")
+        if not has_price:
+            missing_channels.append("가격 정보 미확인")
+        ch_desc = ", ".join(missing_channels[:2]) if missing_channels else "상세 안내 채널 보강 필요"
         
         if is_large:
-            vuln = f"방문자 리뷰 {vr}개와 블로그 리뷰 {br}개로 상권 내 탄탄한 브랜드 인지도를 확보하고 있으나, 수기 상담 의존도가 높고 SNS 숏폼 채널 연계가 부족하여 고단가 고객 락인(Lock-in) 및 예약 자동화 관점에서 추가 성장 여지가 진단됩니다."
+            vuln = f"방문자 리뷰 {vr}개로 상권 내 탄탄한 브랜드 인지도를 확보하고 있으나, 네이버 플레이스 기준 {ch_desc} 상태로 확인되어 고단가 고객 락인(Lock-in) 및 비대면 상담 자동화 관점에서 추가적인 접점 확장이 권장됩니다."
             p_fact = f"대표님, {l['title']}의 높은 방문 트래픽을 고단가 정기 고객으로 락인하고 상담을 자동화하는 {target_solution} 구축을 제안드립니다."
-            p_partner = f"대표님 안녕하십니까. 귀사의 우수한 플레이스 인지도를 바탕으로 상담 리소스를 50% 절감하고 VIP 전환율을 높이는 맞춤 리포트를 무상 제공해 드리고자 합니다."
-            p_dm = f"대표님 안녕하세요! {l['title']} 인지도와 리뷰 평판이 너무 좋아 평소 관심 있게 지켜보고 있었습니다 ✨ 최근 예약 관리 및 고단가 고객 유입 동선은 만족스러우신가요?"
+            p_partner = f"대표님 안녕하십니까. 귀사의 우수한 플레이스 인지도를 바탕으로 상담 리소스를 절감하고 VIP 전환율을 높이는 맞춤 리포트를 무상 제공해 드리고자 합니다."
+            p_dm = f"대표님 안녕하세요! {l['title']} 인지도와 리뷰 평판이 너무 좋아 평소 관심 있게 지켜보고 있었습니다 ✨ 최근 온라인 예약 및 신규 고객 유입 동선은 만족스러우신가요?"
         else:
             if not has_b:
-                vuln = f"방문자 리뷰 {vr}개로 지역 검색 유입은 발생하고 있으나, 네이버 간편 예약 미연동 및 SNS 비주얼 소통 접점 부재로 모바일 탐색 고객의 실제 방문 전환 경로 진단 시 이탈 가설이 도출됩니다. 직관적인 예약 및 혜택 파이프라인 보강이 요구됩니다."
-                p_fact = f"대표님, {l['title']}의 방문자 리뷰 {vr}개 유입 중 전환 장치 부재로 분산되는 잠재 고객을 {target_solution} 도입으로 즉각 흡수해 드립니다."
+                vuln = f"방문자 리뷰 {vr}개로 지역 검색 유입은 발생하고 있으나, 네이버 플레이스 기준 {ch_desc} 및 간편예약 미연동으로 모바일 탐색 고객의 실제 방문 전환 경로 진단 시 이탈 가설이 도출됩니다. 직관적인 상담 및 신청 파이프라인 보강이 요구됩니다."
+                p_fact = f"대표님, {l['title']}의 방문자 리뷰 {vr}개 유입 중 비대면 전환 장치 부재로 분산되는 잠재 고객을 {target_solution} 도입으로 즉각 흡수해 드립니다."
                 p_partner = f"대표님 안녕하십니까. {l['title']}의 지역 플레이스 인지도를 바탕으로 온라인 예약 및 고객 전환율을 극대화하는 맞춤 진단 리포트를 무상 전달드리고자 합니다."
                 p_dm = f"대표님 안녕하세요! {l['title']} 공간이 정말 매력적이어서 피드 구경하다 인사드려요 😊 최근 온라인 채널을 통한 신규 고객 문의는 원활하신가요?"
             else:
-                vuln = f"방문자 리뷰 {vr}개와 네이버 예약을 보유하여 기본 유입망은 갖추었으나, 스마트블록 키워드 장악력과 SNS 채널 연계 콘텐츠가 다소 취약합니다. 상위 노출 경쟁사 대비 실제 예약 전환율 정체를 해소하고 고단가 유치를 위한 유입 경로 최적화가 권장됩니다."
-                p_fact = f"대표님, 이미 활성화된 네이버 예약 시스템의 전환 효율을 {target_solution}로 2배 극대화하여 월 매출 성장을 지원해 드립니다."
+                vuln = f"방문자 리뷰 {vr}개와 네이버 간편예약을 연동하여 기본 유입망은 갖추었으나, 네이버 플레이스 기준 {ch_desc} 상태로 확인됩니다. 상위 노출 경쟁사 대비 실제 탐색 고객의 방문 결정을 가속화하기 위한 채널 접점 최적화가 권장됩니다."
+                p_fact = f"대표님, 이미 활성화된 네이버 예약 시스템에 더해 {target_solution}로 고객 전환율을 극대화하여 매출 성장을 지원해 드립니다."
                 p_partner = f"대표님 안녕하십니까. {l['title']}의 예약 시스템에 고단가 전환과 단골 락인을 더하는 실무 분석 리포트를 무상으로 전달드리고 싶습니다."
                 p_dm = f"대표님 안녕하세요! {l['title']}의 예약 고객 재방문 및 객단가 상승을 돕는 유용한 인사이트를 공유해 드려도 될까요?"
 
@@ -1034,6 +1226,14 @@ def enrich_leads_rule_based(leads: list, target_solution: str) -> list:
             "visitor_reviews": vr,
             "blog_reviews": br,
             "has_booking": has_b,
+            "homepage_url": hp_url,
+            "has_homepage": bool(hp_url),
+            "instagram_url": insta_url,
+            "has_instagram": bool(insta_url),
+            "talktalk_url": l.get("talktalk_url"),
+            "has_talktalk": has_tt,
+            "menu_count": m_count,
+            "has_price_info": has_price,
             "place_url": l.get("place_url", ""),
             "priority_score": score,
             "vulnerability": vuln,
@@ -1256,7 +1456,7 @@ if search_btn:
 results = st.session_state.get("lead_results", None)
 
 if results:
-    # 1) 실무 영업 CRM 시트 규격 데이터 가공 (12개 컬럼)
+    # 1) 실무 영업 CRM 시트 규격 데이터 가공 (팩트 지표 5종 포함 17개 컬럼)
     today_str = datetime.now().strftime("%Y%m%d")
     clean_region = target_region.strip().replace(" ", "_") if target_region else "전국"
     clean_industry = industry.strip().replace(" ", "_") if industry else "업종"
@@ -1269,13 +1469,21 @@ if results:
             "업종": l["category"],
             "전화번호": l.get("telephone", "").strip() if l.get("telephone") and l.get("telephone").strip() not in ["", "정보 없음", "전화번호 미등록", "미등록", "-"] else "미등록 (네이버톡톡/DM 권장)",
             "주소": l["address"],
+            "홈페이지 링크": l.get("homepage_url") or "네이버 플레이스 기준 미등록",
+            "인스타그램 링크": l.get("instagram_url") or "네이버 플레이스 기준 미등록",
+            "네이버 톡톡": "연동" if l.get("has_talktalk") else "미연동",
+            "메뉴 등록 수": f"{l.get('menu_count', 0)}개",
+            "가격 정보 여부": "공개" if l.get("has_price_info") else "플레이스 기준 미확인",
+            "네이버 예약": "연동" if l.get("has_booking") else "미연동",
+            "방문자 리뷰": l.get("visitor_reviews", 0),
+            "블로그 리뷰": l.get("blog_reviews", 0),
             "AI 진단 요약": l["vulnerability"],
             "팩트 제안 문구": l.get("pitch_fact", l.get("cold_pitch", "")),
             "정중한 제안 문구": l.get("pitch_partner", ""),
             "DM 제안 문구": l.get("pitch_dm", ""),
             "연락 일자": "",
             "영업 결과(부재/거절/상담예정/미팅성사)": "",
-            "비고 및 메모": f"방문자 리뷰 {l.get('visitor_reviews', 0)}개, 블로그 리뷰 {l.get('blog_reviews', 0)}개, 예약 {'연동' if l.get('has_booking') else '미연동'}"
+            "비고 및 메모": f"홈페이지 {'등록' if l.get('homepage_url') else '미등록'}, 인스타 {'연동' if l.get('instagram_url') else '미등록'}, 톡톡 {'연동' if l.get('has_talktalk') else '미연동'}"
         }
         for l in results
     ])
@@ -1340,12 +1548,42 @@ if results:
             if lead.get("has_booking"):
                 booking_badge = '<span class="badge-booking-yes">🟢 네이버 간편예약 연동</span>'
             else:
-                booking_badge = '<span class="badge-booking-no">🔴 네이버 예약 미연동 (전환 누수 가설)</span>'
+                booking_badge = '<span class="badge-booking-no">🔴 간편예약 미연동</span>'
                 
             vr_count = lead.get("visitor_reviews", 0)
             br_count = lead.get("blog_reviews", 0)
             review_badge = f'<span class="badge-review">💬 방문자 리뷰 <b>{vr_count:,}</b>개 &nbsp;|&nbsp; 📝 블로그 리뷰 <b>{br_count:,}</b>개</span>'
             
+            # 팩트 뱃지 4종 생성
+            hp_url = lead.get("homepage_url")
+            if hp_url:
+                hp_badge = f'<a href="{hp_url}" target="_blank" class="badge-fact-yes">🌐 공식 홈페이지 ↗</a>'
+            else:
+                hp_badge = '<span class="badge-fact-no">🌐 홈페이지 링크 미등록</span>'
+
+            insta_url = lead.get("instagram_url")
+            if insta_url:
+                insta_badge = f'<a href="{insta_url}" target="_blank" class="badge-fact-yes">📸 인스타그램 ↗</a>'
+            else:
+                insta_badge = '<span class="badge-fact-no">📸 인스타그램 미등록</span>'
+
+            if lead.get("has_talktalk"):
+                tt_url = lead.get("talktalk_url")
+                if tt_url:
+                    talktalk_badge = f'<a href="{tt_url}" target="_blank" class="badge-fact-yes">💬 네이버 톡톡 연동 ↗</a>'
+                else:
+                    talktalk_badge = '<span class="badge-fact-yes">💬 네이버 톡톡 연동</span>'
+            else:
+                talktalk_badge = '<span class="badge-fact-no">💬 톡톡 미연동</span>'
+
+            m_count = lead.get("menu_count", 0)
+            if lead.get("has_price_info"):
+                price_badge = f'<span class="badge-fact-yes">🏷️ 메뉴 {m_count}개 (가격 공개)</span>'
+            elif m_count > 0:
+                price_badge = f'<span class="badge-fact-no">🏷️ 가격 미확인 ({m_count}개)</span>'
+            else:
+                price_badge = '<span class="badge-fact-no">🏷️ 메뉴/가격 미확인</span>'
+
             place_link_html = ''
             if lead.get("place_url"):
                 place_link_html = f'<a href="{lead["place_url"]}" target="_blank" style="font-size:12px; color:#2563eb; margin-left:8px; text-decoration:none; font-weight:600;">네이버 플레이스 ↗</a>'
@@ -1361,15 +1599,21 @@ if results:
                     </div>
                     <div>{score_badge}</div>
                 </div>
-                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
                     {booking_badge}
+                    {hp_badge}
+                    {insta_badge}
+                    {talktalk_badge}
+                    {price_badge}
+                </div>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
                     {review_badge}
                 </div>
                 <div style="font-size: 13px; color: #475569; margin-bottom: 10px;">
                     📍 {lead['address']} &nbsp;|&nbsp; 📞 {lead['telephone']}
                 </div>
                 <div class="vuln-box">
-                    <strong>🔍 AI 온라인 전환 경로 진단 (팩트 지표 기반 분석):</strong><br>
+                    <strong>🔍 AI 온라인 전환 경로 진단 (확인된 팩트 기반 분석):</strong><br>
                     {lead['vulnerability']}
                 </div>
             </div>
