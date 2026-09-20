@@ -276,14 +276,23 @@ st.markdown("""
         color: #475569;
     }
     
-    /* 결핍 진단 박스 */
+    /* AI 상세 진단 분석 패널 (P1-1b) */
     .vuln-box {
-        background-color: rgba(239, 68, 68, 0.08);
-        border-left: 4px solid #ef4444;
-        padding: 10px 14px;
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-left: 3.5px solid #64748b;
+        padding: 11px 14px;
         border-radius: 6px;
-        margin: 12px 0;
-        font-size: 13.5px;
+        margin: 10px 0 12px 0;
+        font-size: 13px;
+        line-height: 1.55;
+        color: #334155;
+    }
+    .vuln-box strong {
+        color: #0f172a;
+        font-weight: 700;
+        display: inline-block;
+        margin-bottom: 4px;
     }
     
     /* 콜드 피치 박스 */
