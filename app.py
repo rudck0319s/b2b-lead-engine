@@ -856,6 +856,122 @@ def fix_mojibake(text: str) -> str:
     except Exception:
         return text
 
+
+def sanitize_lead(lead: dict, target_region: str, industry: str) -> dict:
+    """
+    Candidate Sanitizer v0 (Observe Only):
+    수집된 매장 팩트(주소, 카테고리)와 사용자의 검색 타깃(target_region, industry)의
+    적합성을 confirmed / uncertain / mismatch 3단계로 보수적으로 판정 (관찰 모드)
+    - mismatch: 명백한 타 행정구역 이탈 또는 검증된 비적합 업종
+    - uncertain: 동/상권/역세권 등 자유 주소이거나 복합시설 가능성
+    - confirmed: 명확히 일치
+    """
+    reg = (target_region or "").strip()
+    ind = (industry or "").strip()
+    addr = str(lead.get("roadAddress") or lead.get("address") or "").strip()
+    cat = str(lead.get("category") or "").strip()
+    title = str(lead.get("title") or lead.get("name") or "").strip()
+
+    # 1. 지역 판정 (Region Match)
+    region_match = "uncertain"
+    region_reason = ""
+
+    if not reg:
+        region_match = "uncertain"
+        region_reason = "타깃 지역 미입력"
+    else:
+        tokens = reg.split()
+        last_token = tokens[-1] if tokens else ""
+        is_admin_district = any(last_token.endswith(sfx) for sfx in ["구", "시", "군"])
+
+        if is_admin_district:
+            target_district = last_token
+            if target_district in addr:
+                region_match = "confirmed"
+                region_reason = f"행정구역 일치 ({target_district})"
+            else:
+                region_match = "mismatch"
+                region_reason = f"행정구역 불일치 (타깃: {target_district}, 주소: {addr})"
+        else:
+            core_reg = reg[:-1] if reg.endswith("역") and len(reg) > 2 else reg
+            core_reg_dong = reg[:-1] if reg.endswith("동") and len(reg) > 2 else reg
+
+            if reg in addr or core_reg in addr or core_reg_dong in addr or reg in title or core_reg in title:
+                region_match = "confirmed"
+                region_reason = f"지역 키워드 확인 ({reg})"
+            else:
+                region_match = "uncertain"
+                region_reason = f"자유 상권/역세권 주소 직접 대조 불가 ({reg})"
+
+    # 2. 업종 판정 (Category Match)
+    category_match = "uncertain"
+    category_reason = ""
+
+    cat_lower = cat.lower()
+    ind_lower = ind.lower()
+    cafe_allowlist = ["카페", "디저트", "베이커리", "커피", "브런치", "제과", "북카페", "아이스크림"]
+
+    is_mismatch = False
+    if "피부과" in ind_lower:
+        if any(bad in cat_lower for bad in ["발관리", "마사지", "스파"]) and not any(ok in cat_lower for ok in ["피부과", "의원", "병원"]):
+            is_mismatch = True
+            category_reason = f"비의료 미용/마사지 시설 ({cat})"
+    elif "필라테스" in ind_lower:
+        if any(bad in cat_lower for bad in ["수영장", "골프"]) and not any(ok in cat_lower for ok in ["필라테스", "요가"]):
+            is_mismatch = True
+            category_reason = f"수영/골프 등 이종 체육시설 ({cat})"
+    elif "카페" in ind_lower:
+        if any(bad in cat_lower for bad in ["술집", "주점", "호프", "포차", "요리주점"]) and not any(ok in cat_lower for ok in cafe_allowlist):
+            is_mismatch = True
+            category_reason = f"야간 주점/유흥 시설 ({cat})"
+
+    if is_mismatch:
+        category_match = "mismatch"
+    else:
+        if ind_lower in cat_lower:
+            category_match = "confirmed"
+            category_reason = f"업종명 직접 일치 ({cat})"
+        elif "카페" in ind_lower and any(ok in cat_lower for ok in cafe_allowlist):
+            category_match = "confirmed"
+            category_reason = f"카페 연관 표준 카테고리 ({cat})"
+        elif "필라테스" in ind_lower and any(sub in cat_lower for sub in ["헬스장", "피트니스", "스포츠시설", "체육시설", "요가"]):
+            category_match = "uncertain"
+            category_reason = f"헬스/피트니스 복합시설 가능성 ({cat})"
+        elif "피부과" in ind_lower and any(sub in cat_lower for sub in ["피부", "체형", "에스테틱", "관리"]):
+            category_match = "uncertain"
+            category_reason = f"에스테틱/피부관리 복합 가능성 ({cat})"
+        else:
+            category_match = "uncertain"
+            category_reason = f"카테고리 직관 대조 보류 ({cat})"
+
+    # 3. 종합 Sanitizer 상태 판정
+    if region_match == "mismatch" or category_match == "mismatch":
+        sanitizer_status = "mismatch"
+        reasons = []
+        if region_match == "mismatch":
+            reasons.append(region_reason)
+        if category_match == "mismatch":
+            reasons.append(category_reason)
+        sanitizer_reason = " / ".join(reasons)
+    elif region_match == "uncertain" or category_match == "uncertain":
+        sanitizer_status = "uncertain"
+        reasons = []
+        if region_match == "uncertain":
+            reasons.append(region_reason)
+        if category_match == "uncertain":
+            reasons.append(category_reason)
+        sanitizer_reason = " / ".join(reasons)
+    else:
+        sanitizer_status = "confirmed"
+        sanitizer_reason = "지역 및 업종 적합도 정상 확인"
+
+    return {
+        "region_match": region_match,
+        "category_match": category_match,
+        "sanitizer_status": sanitizer_status,
+        "sanitizer_reason": sanitizer_reason
+    }
+
 def crawl_naver_place_leads(region: str, industry: str, limit: int = 5) -> list:
     """모바일 네이버 지도/검색(m.search.naver.com)에서 실시간으로 상위 매장 5곳의 팩트 지표를 고속 스크래핑
     (UTF-8 강제 디코딩으로 한글 상호명 및 주소 깨짐 완전 차단)
@@ -983,7 +1099,7 @@ def crawl_naver_place_leads(region: str, industry: str, limit: int = 5) -> list:
                         keywords_status = "unconfirmed"
                         has_keywords_info = False
 
-                    leads.append({
+                    lead_item = {
                         "id": pid,
                         "title": title,
                         "category": category,
@@ -1006,7 +1122,10 @@ def crawl_naver_place_leads(region: str, industry: str, limit: int = 5) -> list:
                         "has_keywords_info": has_keywords_info,
                         "place_url": pr.url or f"https://m.place.naver.com/place/{pid}/home",
                         "link": homepage_url or instagram_url or pr.url or f"https://m.place.naver.com/place/{pid}/home"
-                    })
+                    }
+                    san_res = sanitize_lead(lead_item, region, industry)
+                    lead_item.update(san_res)
+                    leads.append(lead_item)
         except Exception:
             continue
 
