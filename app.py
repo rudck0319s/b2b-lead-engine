@@ -986,14 +986,36 @@ def crawl_naver_place_leads(region: str, industry: str, limit: int = 10) -> list
     # 1. 모바일 통합 검색에서 플레이스 ID 추출
     search_url = f"https://m.search.naver.com/search.naver?where=m&query={requests.utils.quote(query)}"
     place_ids = []
+    id_pattern = r'm\.place\.naver\.com/(?:place|restaurant|cafe|hairshop|hospital|accommodation|[a-zA-Z0-9_\-]+)/(\d+)'
     try:
         r = requests.get(search_url, headers=headers, timeout=6)
         r.encoding = 'utf-8'
         search_html = r.content.decode('utf-8', errors='replace')
-        id_pattern = r'm\.place\.naver\.com/(?:place|restaurant|cafe|hairshop|hospital|accommodation|[a-zA-Z0-9_\-]+)/(\d+)'
         place_ids = list(dict.fromkeys(re.findall(id_pattern, search_html)))[:limit]
     except Exception:
         place_ids = []
+
+    # 1-1. Candidate Discovery v2: 동일 query 기반 Same-query Map Expansion (Primary가 limit보다 적을 경우에만 1회 보강)
+    if len(place_ids) < limit:
+        try:
+            map_url = f"https://m.map.naver.com/search2/search.naver?query={requests.utils.quote(query)}"
+            mr = requests.get(map_url, headers=headers, timeout=5)
+            mr.encoding = 'utf-8'
+            map_html = mr.content.decode('utf-8', errors='replace')
+            map_ids = re.findall(id_pattern, map_html)
+            
+            # place_id 기준 순서보존 dedupe (Primary ID 순서 100% 보존, 중복 없이 신규 ID만 append)
+            seen = set(place_ids)
+            for pid in map_ids:
+                if pid not in seen:
+                    seen.add(pid)
+                    place_ids.append(pid)
+                    if len(place_ids) >= limit:
+                        break
+        except Exception:
+            pass  # Map 요청 실패 시 기존 primary place_ids 안전 보존 (Zero-Crash 무중단 폴백)
+
+    place_ids = place_ids[:limit]
 
     leads = []
     # 2. 각 플레이스 모바일 홈 페이지에서 __APOLLO_STATE__ 및 예약/링크/메뉴 태그 고속 추출
