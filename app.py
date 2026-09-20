@@ -475,6 +475,8 @@ def generate_excel_bytes(df: pd.DataFrame) -> bytes:
         
         # 1. 컬럼별 맞춤 너비(Width) 정의
         col_width_defaults = {
+            "연락 우선순위": 16,
+            "솔루션 적합도 점수": 18,
             "우선순위점수": 14,
             "상호명": 25,
             "업종": 16,
@@ -970,6 +972,104 @@ def crawl_naver_place_leads(region: str, industry: str, limit: int = 5) -> list:
 
     return leads
 
+def calculate_priority_score(lead: dict, target_solution: str) -> int:
+    """
+    현재 수집된 팩트와 선택된 target_solution을 기반으로 영업 제안 우선순위 점수(0~100)를 결정론적으로 계산.
+    - 점수의 의미: '실제 결핍 확정도'나 '업체 인지도/규모'가 아닌 '수집 데이터 기준 솔루션 제안 우선순위'
+    - 동일한 업체 팩트 + 동일한 target_solution이면 100% 동일한 점수 산출
+    - 리뷰 수/활동량 지표는 솔루션 제안 필요성의 직접 근거가 아니므로 점수 계산에서 완전 배제 (가산 없음)
+    """
+    has_b = bool(lead.get("has_booking"))
+    has_hp = bool(lead.get("has_homepage"))
+    has_insta = bool(lead.get("has_instagram"))
+    has_tt = bool(lead.get("has_talktalk"))
+    has_price = bool(lead.get("has_price_info"))
+    menu_count = int(lead.get("menu_count") or 0)
+
+    sol = (target_solution or "").strip()
+
+    # 1. 솔루션별 결정론적 점수 산정
+    # A. 종합 로컬 마케팅 (플레이스 상위노출 & 블로그 체험단) - "플레이스" 단어 포함 매칭 충돌 방지를 위해 최우선 판별
+    if "로컬 마케팅" in sol or "상위노출" in sol or "체험단" in sol:
+        # 현재 키워드/순위 팩트 미확보 상태이므로 과도한 고득점 금지 (상한 74점 고정)
+        base = 62
+        if not has_b:
+            base += 4
+        if not has_tt:
+            base += 4
+        if not has_price:
+            base += 4
+        return max(40, min(74, base))
+
+    # B. 네이버 플레이스 최적화 & 간편 예약 연동
+    elif "플레이스" in sol or "예약" in sol:
+        # 기본 95점에서 수집 데이터상 이미 확인된 접점마다 감점
+        base = 95
+        if has_b:
+            base -= 30  # 핵심 기능인 간편예약 이미 확인 (가장 큰 감점)
+        if has_tt:
+            base -= 15  # 톡톡 상담 연동 확인
+        if has_price:
+            base -= 10  # 가격 공개 확인
+        if menu_count >= 5:
+            base -= 8   # 상세 메뉴 등록 확인
+        elif menu_count > 0:
+            base -= 4
+        if has_hp:
+            base -= 6   # 보조 신호: 공식 홈페이지 등록 확인
+        
+        return max(20, min(98, base))
+
+    # C. 웹사이트/랜딩페이지 제작 & 전환 최적화
+    elif "웹사이트" in sol or "랜딩페이지" in sol:
+        if not has_hp:
+            # 홈페이지 미확인 -> 높은 제안 기회 (90~96점)
+            base = 90
+            if not has_b:
+                base += 3
+            if not has_tt:
+                base += 3
+            return max(88, min(96, base))
+        else:
+            # 홈페이지 확인 -> 신규 제작 필요성 낮음 (상한 68점으로 엄격 제한)
+            base = 55
+            if not has_b:
+                base += 6
+            if not has_tt:
+                base += 5
+            return max(35, min(68, base))
+
+    # D. SNS 퍼포먼스 광고 & 숏폼/인스타 브랜딩
+    elif "SNS" in sol or "인스타" in sol or "숏폼" in sol:
+        if not has_insta:
+            # 인스타그램 미확인 -> 높은 제안 기회 (90~96점)
+            base = 90
+            if not has_hp:
+                base += 3
+            if not has_b:
+                base += 3
+            return max(88, min(96, base))
+        else:
+            # 인스타그램 확인 -> 운영 품질 직접 판별 불가 (상한 68점으로 엄격 제한)
+            base = 55
+            if not has_hp:
+                base += 6
+            if not has_b:
+                base += 5
+            return max(35, min(68, base))
+
+    # E. 기타 (직접 입력)
+    else:
+        # 임의 입력 솔루션 -> 일반 접점 미확인 정도 기준 보조 계산 (상한 74점 고정)
+        base = 60
+        if not has_b:
+            base += 5
+        if not has_hp:
+            base += 5
+        if not has_tt:
+            base += 4
+        return max(40, min(74, base))
+
 def analyze_crawled_leads_with_gemini(
     api_key: str, 
     leads: list, 
@@ -1114,14 +1214,15 @@ def analyze_crawled_leads_with_gemini(
             has_price = lead.get("has_price_info", False)
             is_large = (vr >= 150 or br >= 50)
 
+            # 우선순위 점수는 Gemini 반환값 대신 팩트 기반 Python 함수에서 결정론적으로 최종 계산
+            score = calculate_priority_score(lead, target_solution)
+
             if match_ai:
                 vuln = match_ai.get("vulnerability", "")
-                score = int(match_ai.get("priority_score", 90))
                 p_fact = match_ai.get("pitch_fact", match_ai.get("cold_pitch", ""))
                 p_partner = match_ai.get("pitch_partner", "")
                 p_dm = match_ai.get("pitch_dm", "")
             else:
-                score = 92 if not has_b else 80
                 missing_channels = []
                 if not hp_url:
                     missing_channels.append("공식 홈페이지 미확인")
@@ -1188,7 +1289,7 @@ def enrich_leads_rule_based(leads: list, target_solution: str) -> list:
         m_count = l.get("menu_count", 0)
         has_price = l.get("has_price_info", False)
         is_large = (vr >= 150 or br >= 50)
-        score = 94 if not has_b and vr >= 30 else (88 if not has_b else 78)
+        score = calculate_priority_score(l, target_solution)
 
         missing_channels = []
         if not hp_url:
@@ -1406,7 +1507,7 @@ if search_btn:
     # 2) 실제 하이브리드 파이프라인
     else:
         # 1단계: 네이버 플레이스 모바일 타깃 고속 수집
-        with st.spinner(f"🔍 네이버 플레이스에서 '{target_region} {industry}' 상위 5개 업체의 팩트 지표(리뷰 수/예약 여부)를 실시간 수집 중..."):
+        with st.spinner(f"🔍 네이버 검색에서 확인된 '{target_region} {industry}' 5개 후보 업체의 팩트 지표를 실시간 수집 중..."):
             crawled_leads = crawl_naver_place_leads(target_region, industry, limit=5)
 
         if not crawled_leads:
@@ -1457,7 +1558,27 @@ if search_btn:
 results = st.session_state.get("lead_results", None)
 
 if results:
-    # 1) 실무 영업 CRM 시트 규격 데이터 가공 (팩트 지표 5종 포함 17개 컬럼)
+    # 0) priority_score 기준 내림차순 정렬 및 동점 처리(공동 순위) 부여
+    sorted_results = sorted(results, key=lambda x: x.get("priority_score", 0), reverse=True)
+    
+    # 점수별 빈도수 집계 (동점 판별용)
+    from collections import Counter
+    score_counts = Counter(l.get("priority_score", 0) for l in sorted_results)
+    
+    current_rank = 1
+    for i, lead in enumerate(sorted_results):
+        score = lead.get("priority_score", 0)
+        if i > 0 and score < sorted_results[i - 1].get("priority_score", 0):
+            current_rank = i + 1  # Standard competition ranking (예: 1, 2, 3, 3, 5)
+        
+        is_tie = score_counts[score] > 1
+        lead["contact_rank"] = current_rank
+        lead["rank_label"] = f"공동 {current_rank}순위" if is_tie else f"{current_rank}순위"
+        lead["rank_badge"] = f"공동 {current_rank}위" if is_tie else f"{current_rank}위"
+
+    results = sorted_results
+
+    # 1) 실무 영업 CRM 시트 규격 데이터 가공 (팩트 지표 5종 포함 18개 컬럼)
     today_str = datetime.now().strftime("%Y%m%d")
     clean_region = target_region.strip().replace(" ", "_") if target_region else "전국"
     clean_industry = industry.strip().replace(" ", "_") if industry else "업종"
@@ -1465,7 +1586,8 @@ if results:
 
     df_export = pd.DataFrame([
         {
-            "우선순위점수": l["priority_score"],
+            "연락 우선순위": l.get("rank_label", f"{i+1}순위"),
+            "솔루션 적합도 점수": l["priority_score"],
             "상호명": l["title"],
             "업종": l["category"],
             "전화번호": l.get("telephone", "").strip() if l.get("telephone") and l.get("telephone").strip() not in ["", "정보 없음", "전화번호 미등록", "미등록", "-"] else "미등록 (네이버톡톡/DM 권장)",
@@ -1486,17 +1608,18 @@ if results:
             "영업 결과(부재/거절/상담예정/미팅성사)": "",
             "비고 및 메모": f"홈페이지 {'등록' if l.get('homepage_url') else '미등록'}, 인스타 {'연동' if l.get('instagram_url') else '미등록'}, 톡톡 {'연동' if l.get('has_talktalk') else '미연동'}"
         }
-        for l in results
+        for i, l in enumerate(results)
     ])
-    # 영업 우선순위점수 기준 내림차순 정렬
-    df_export = df_export.sort_values(by="우선순위점수", ascending=False).reset_index(drop=True)
+    # 솔루션 적합도 점수 기준 내림차순 정렬
+    df_export = df_export.sort_values(by="솔루션 적합도 점수", ascending=False).reset_index(drop=True)
     excel_bytes = generate_excel_bytes(df_export)
     excel_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     # 2) 결과 목록 상단 헤더 & 프로 결제 안내 모달 연동 엑셀 다운로드 버튼
     top_col1, top_col2 = st.columns([2.6, 1.8])
     with top_col1:
-        st.markdown(f"### 📋 네이버 플레이스 영업 리스트 ({len(results)}개 매장)")
+        st.markdown(f"### 📋 네이버 플레이스 영업 후보 ({len(results)}개)")
+        st.caption("💡 현재 수집된 네이버 플레이스 팩트와 선택한 솔루션의 적합도를 기준으로 연락 우선순위를 정렬했습니다.")
     with top_col2:
         if st.session_state.get("is_pro_authenticated", False):
             st.download_button(
@@ -1536,14 +1659,15 @@ if results:
     # [탭 1: 카드 뷰]
     with tab1:
         for lead in results:
-            # 점수 뱃지 분기
-            score = lead["priority_score"]
-            if score >= 88:
-                score_badge = f'<span class="badge-score-high">🔥 우선순위 점수: {score}점 (최상)</span>'
-            elif score >= 75:
-                score_badge = f'<span class="badge-score-mid">⚡ 우선순위 점수: {score}점 (유망)</span>'
+            # 연락 우선순위 뱃지 분기 (절대 점수 노출 배제)
+            rank_num = lead.get("contact_rank", 1)
+            rank_badge_text = lead.get("rank_badge", f"{rank_num}위")
+            if rank_num == 1:
+                score_badge = f'<span class="badge-score-high">🔥 연락 우선순위 {rank_badge_text}</span>'
+            elif rank_num == 2:
+                score_badge = f'<span class="badge-score-mid">⚡ 연락 우선순위 {rank_badge_text}</span>'
             else:
-                score_badge = f'<span class="badge-score-low">⚪ 우선순위 점수: {score}점 (보통)</span>'
+                score_badge = f'<span class="badge-score-low">연락 우선순위 {rank_badge_text}</span>'
                 
             # 예약 뱃지 분기
             if lead.get("has_booking"):
