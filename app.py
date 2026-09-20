@@ -291,6 +291,10 @@ MOCK_LEADS = [
         "talktalk_url": None,
         "menu_count": 0,
         "has_price_info": False,
+        "keywords": [],
+        "keyword_count": None,
+        "keywords_status": "unconfirmed",
+        "has_keywords_info": False,
         "visitor_reviews": 86,
         "blog_reviews": 42,
         "has_booking": False,
@@ -318,6 +322,10 @@ MOCK_LEADS = [
         "talktalk_url": "https://talk.naver.com/sample2",
         "menu_count": 8,
         "has_price_info": True,
+        "keywords": ["성수카페", "스페셜티커피", "핸드드립"],
+        "keyword_count": 3,
+        "keywords_status": "confirmed",
+        "has_keywords_info": True,
         "visitor_reviews": 210,
         "blog_reviews": 130,
         "has_booking": False,
@@ -345,6 +353,10 @@ MOCK_LEADS = [
         "talktalk_url": None,
         "menu_count": 4,
         "has_price_info": True,
+        "keywords": ["강남구청필라테스", "체형교정", "기구필라테스"],
+        "keyword_count": 3,
+        "keywords_status": "confirmed",
+        "has_keywords_info": True,
         "visitor_reviews": 42,
         "blog_reviews": 15,
         "has_booking": False,
@@ -372,6 +384,10 @@ MOCK_LEADS = [
         "talktalk_url": "https://talk.naver.com/sample4",
         "menu_count": 12,
         "has_price_info": True,
+        "keywords": ["성수디저트", "성수베이커리", "성수데이트"],
+        "keyword_count": 3,
+        "keywords_status": "confirmed",
+        "has_keywords_info": True,
         "visitor_reviews": 14,
         "blog_reviews": 28,
         "has_booking": True,
@@ -399,6 +415,10 @@ MOCK_LEADS = [
         "talktalk_url": None,
         "menu_count": 0,
         "has_price_info": False,
+        "keywords": ["대치동필라테스", "자이로토닉", "체형교정"],
+        "keyword_count": 3,
+        "keywords_status": "confirmed",
+        "has_keywords_info": True,
         "visitor_reviews": 130,
         "blog_reviews": 85,
         "has_booking": False,
@@ -487,6 +507,8 @@ def generate_excel_bytes(df: pd.DataFrame) -> bytes:
             "네이버 톡톡": 14,
             "메뉴 등록 수": 14,
             "가격 정보 여부": 22,
+            "대표 키워드 수": 14,
+            "대표 키워드": 32,
             "네이버 예약": 14,
             "방문자 리뷰": 14,
             "블로그 리뷰": 14,
@@ -947,6 +969,20 @@ def crawl_naver_place_leads(region: str, industry: str, limit: int = 5) -> list:
                         for m in menu_items
                     )
 
+                    # 5) 팩트 5: 네이버 플레이스 대표 키워드 (스마트플레이스 관리자 등록 대표 키워드) 방어적 파싱
+                    info_tab = place_detail.get('informationTab') or {}
+                    raw_keywords = info_tab.get('keywordList')
+                    if isinstance(raw_keywords, list):
+                        keywords = [str(k).strip() for k in raw_keywords if k and str(k).strip()]
+                        keyword_count = len(keywords)
+                        keywords_status = "confirmed"
+                        has_keywords_info = True
+                    else:
+                        keywords = []
+                        keyword_count = None
+                        keywords_status = "unconfirmed"
+                        has_keywords_info = False
+
                     leads.append({
                         "id": pid,
                         "title": title,
@@ -964,6 +1000,10 @@ def crawl_naver_place_leads(region: str, industry: str, limit: int = 5) -> list:
                         "has_talktalk": has_talktalk,
                         "menu_count": menu_count,
                         "has_price_info": has_price_info,
+                        "keywords": keywords,
+                        "keyword_count": keyword_count,
+                        "keywords_status": keywords_status,
+                        "has_keywords_info": has_keywords_info,
                         "place_url": pr.url or f"https://m.place.naver.com/place/{pid}/home",
                         "link": homepage_url or instagram_url or pr.url or f"https://m.place.naver.com/place/{pid}/home"
                     })
@@ -1097,6 +1137,16 @@ def analyze_crawled_leads_with_gemini(
         has_tt = l.get("has_talktalk", False)
         m_count = l.get("menu_count", 0)
         has_price = l.get("has_price_info", False)
+        kws = l.get("keywords", [])
+        has_kw_info = l.get("has_keywords_info", False) or l.get("keywords_status") == "confirmed"
+        if has_kw_info:
+            if kws:
+                kw_status = f"네이버 플레이스 대표 키워드 확인: {', '.join(kws)}"
+            else:
+                kw_status = "네이버 플레이스 수집 데이터에서 대표 키워드가 0개로 확인됨"
+        else:
+            kw_status = "네이버 플레이스 수집 데이터에서 대표 키워드 미확인"
+
         facts_list.append({
             "idx": idx,
             "title": l["title"],
@@ -1108,7 +1158,8 @@ def analyze_crawled_leads_with_gemini(
             "homepage_status": f"공식 홈페이지 등록 확인 ({hp_url})" if hp_url else "네이버 플레이스 수집 데이터에서 공식 홈페이지 미확인",
             "instagram_status": f"공식 인스타그램 등록 확인 ({insta_url})" if insta_url else "네이버 플레이스 수집 데이터에서 인스타그램 미확인",
             "talktalk_status": "네이버 톡톡 상담 연동 확인" if has_tt else "네이버 플레이스 수집 데이터에서 톡톡 미확인",
-            "price_status": f"메뉴/서비스 {m_count}개 등록 확인 (가격 정보 노출)" if has_price else (f"등록 메뉴 {m_count}개 확인 (네이버 플레이스 수집 데이터에서 가격 정보 미확인)" if m_count > 0 else "네이버 플레이스 수집 데이터에서 메뉴 및 가격 정보 미확인")
+            "price_status": f"메뉴/서비스 {m_count}개 등록 확인 (가격 정보 노출)" if has_price else (f"등록 메뉴 {m_count}개 확인 (네이버 플레이스 수집 데이터에서 가격 정보 미확인)" if m_count > 0 else "네이버 플레이스 수집 데이터에서 메뉴 및 가격 정보 미확인"),
+            "representative_keywords": kw_status
         })
 
     facts_json = json.dumps(facts_list, ensure_ascii=False, indent=2)
@@ -1133,6 +1184,7 @@ def analyze_crawled_leads_with_gemini(
 
 2. [바람직한 팩트 기술 및 진단 서술 방식]:
    - 리뷰 수: 리뷰가 많더라도 '높은 브랜드 인지도', '관심도 풍부' 등으로 자의적 해석하지 말고, 있는 사실 그대로 '네이버 기준 블로그 리뷰 O건 확인' 수준으로만 기술하세요.
+   - 대표 키워드: 확인된 경우 실제 키워드 목록(또는 0개 확인 사실)을 팩트로 활용할 수 있습니다. 대표 키워드 미확인 또는 0개 확인을 실제 미등록이나 SEO 미흡, 관리 소홀을 의미한다고 단정하지 마세요 ('네이버 플레이스 수집 데이터에서 대표 키워드는 확인되지 않았거나 0개로 확인되었으며, 실제 등록 및 검색 관리 여부는 추가 확인이 필요합니다' 수준으로 기술). 키워드 수만으로 검색 상위노출 성과, 검색량, 노출 순위를 임의로 추정하거나 단정하지 마세요.
    - 미확인 채널: '미확인'을 '없음/미흡/부재'로 단정하지 마세요. '네이버 플레이스 수집 데이터에서는 [항목]이 확인되지 않았으며, 다른 채널 운영 여부는 현재 데이터만으로 확인할 수 없습니다'로 표현하세요.
    - 가격 미확인: 가격 미확인을 이탈로 연결 짓지 마세요. '네이버 플레이스 수집 데이터에서는 상세 가격 정보가 확인되지 않았습니다. 업종 특성상 상담 후 가격을 안내하는 구조일 수 있으므로 실제 안내 경로는 추가 확인이 필요합니다' 수준으로 신중히 기술하세요.
    - 외부 사정: 카카오톡 채널, 유선 상담, 오프라인 접객 상태 등 수집되지 않은 영역을 임의로 단정하지 마세요.
@@ -1262,6 +1314,10 @@ def analyze_crawled_leads_with_gemini(
                 "has_talktalk": has_tt,
                 "menu_count": m_count,
                 "has_price_info": has_price,
+                "keywords": lead.get("keywords", []),
+                "keyword_count": lead.get("keyword_count"),
+                "keywords_status": lead.get("keywords_status", "confirmed" if lead.get("keywords") else "unconfirmed"),
+                "has_keywords_info": lead.get("has_keywords_info", bool(lead.get("keywords"))),
                 "place_url": lead.get("place_url", ""),
                 "priority_score": score,
                 "vulnerability": vuln,
@@ -1336,6 +1392,10 @@ def enrich_leads_rule_based(leads: list, target_solution: str) -> list:
             "has_talktalk": has_tt,
             "menu_count": m_count,
             "has_price_info": has_price,
+            "keywords": l.get("keywords", []),
+            "keyword_count": l.get("keyword_count"),
+            "keywords_status": l.get("keywords_status", "confirmed" if l.get("keywords") else "unconfirmed"),
+            "has_keywords_info": l.get("has_keywords_info", bool(l.get("keywords"))),
             "place_url": l.get("place_url", ""),
             "priority_score": score,
             "vulnerability": vuln,
@@ -1597,6 +1657,8 @@ if results:
             "네이버 톡톡": "연동" if l.get("has_talktalk") else "미연동",
             "메뉴 등록 수": f"{l.get('menu_count', 0)}개",
             "가격 정보 여부": "공개" if l.get("has_price_info") else "플레이스 기준 미확인",
+            "대표 키워드 수": (l.get("keyword_count", len(l.get("keywords", []))) if (l.get("has_keywords_info") or l.get("keywords_status") == "confirmed") and l.get("keyword_count") is not None else "미확인"),
+            "대표 키워드": ((", ".join(l.get("keywords", [])) if l.get("keywords") else "0개 확인") if (l.get("has_keywords_info") or l.get("keywords_status") == "confirmed") else "미확인"),
             "네이버 예약": "연동" if l.get("has_booking") else "미연동",
             "방문자 리뷰": l.get("visitor_reviews", 0),
             "블로그 리뷰": l.get("blog_reviews", 0),
@@ -1709,6 +1771,20 @@ if results:
             else:
                 price_badge = '<span class="badge-fact-no">🏷️ 메뉴/가격 미확인</span>'
 
+            # 대표 키워드 뱃지 및 보조 텍스트
+            has_kw = lead.get("has_keywords_info", False) or lead.get("keywords_status") == "confirmed"
+            kw_list = lead.get("keywords", [])
+            if has_kw:
+                if kw_list:
+                    kw_badge = f'<span class="badge-fact-yes">🔑 대표 키워드 {len(kw_list)}개</span>'
+                    kw_text_html = f'<div style="font-size: 12.5px; color: #475569; margin: 4px 0 8px 0;">🔑 <b>대표 키워드:</b> {" · ".join(kw_list)}</div>'
+                else:
+                    kw_badge = '<span class="badge-fact-no">🔑 대표 키워드 0개 확인</span>'
+                    kw_text_html = ''
+            else:
+                kw_badge = '<span class="badge-fact-no">🔑 대표 키워드 미확인</span>'
+                kw_text_html = ''
+
             place_link_html = ''
             if lead.get("place_url"):
                 place_link_html = f'<a href="{lead["place_url"]}" target="_blank" style="font-size:12px; color:#2563eb; margin-left:8px; text-decoration:none; font-weight:600;">네이버 플레이스 ↗</a>'
@@ -1730,7 +1806,9 @@ if results:
                     {insta_badge}
                     {talktalk_badge}
                     {price_badge}
+                    {kw_badge}
                 </div>
+                {kw_text_html}
                 <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
                     {review_badge}
                 </div>
