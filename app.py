@@ -252,6 +252,30 @@ st.markdown("""
         font-weight: 500;
     }
     
+    /* Verified Fact 헤드라인 박스 (P1-1a) */
+    .fact-headline-box {
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin: 10px 0 6px 0;
+        font-size: 13px;
+        line-height: 1.4;
+    }
+    .fact-headline-title {
+        font-weight: 700;
+        color: #0f172a;
+        margin-right: 6px;
+    }
+    .fact-headline-gaps {
+        font-weight: 600;
+        color: #b45309;
+    }
+    .fact-headline-all {
+        font-weight: 500;
+        color: #475569;
+    }
+    
     /* 결핍 진단 박스 */
     .vuln-box {
         background-color: rgba(239, 68, 68, 0.08);
@@ -1944,6 +1968,26 @@ if results:
                 kw_badge = '<span class="badge-fact-neutral">🔑 대표 키워드 미확인</span>'
                 kw_text_html = ''
 
+            # 7) Verified Fact 기반 결정론적 1줄 헤드라인 (P1-1a)
+            verified_gaps = []
+            if not lead.get("has_booking"):
+                verified_gaps.append("간편예약 미연동")
+            if not lead.get("homepage_url"):
+                verified_gaps.append("홈페이지 링크 미등록")
+            if not lead.get("instagram_url"):
+                verified_gaps.append("인스타 링크 미등록")
+            if not lead.get("has_talktalk"):
+                verified_gaps.append("톡톡 미연동")
+
+            if verified_gaps:
+                headline_title = "🎯 확인된 보완 포인트"
+                headline_content = " · ".join(verified_gaps)
+                fact_headline_html = f'<div class="fact-headline-box"><span class="fact-headline-title">{headline_title}:</span> <span class="fact-headline-gaps">{headline_content}</span></div>'
+            else:
+                headline_title = "✓ 주요 접점 4종 모두 확인됨"
+                headline_content = "간편예약 · 홈페이지 링크 · 인스타 링크 · 톡톡"
+                fact_headline_html = f'<div class="fact-headline-box"><span class="fact-headline-title">{headline_title}:</span> <span class="fact-headline-all">{headline_content}</span></div>'
+
             place_link_html = ''
             if lead.get("place_url"):
                 place_link_html = f'<a href="{lead["place_url"]}" target="_blank" style="font-size:12px; color:#2563eb; margin-left:8px; text-decoration:none; font-weight:600;">네이버 플레이스 ↗</a>'
@@ -1974,6 +2018,7 @@ if results:
                 <div style="font-size: 13px; color: #475569; margin-bottom: 10px;">
                     📍 {lead['address']} &nbsp;|&nbsp; 📞 {lead['telephone']}
                 </div>
+                {fact_headline_html}
                 <div class="vuln-box">
                     <strong>🔍 AI 온라인 전환 경로 진단 (확인된 팩트 기반 분석):</strong><br>
                     {lead['vulnerability']}
