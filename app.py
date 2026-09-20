@@ -972,8 +972,8 @@ def sanitize_lead(lead: dict, target_region: str, industry: str) -> dict:
         "sanitizer_reason": sanitizer_reason
     }
 
-def crawl_naver_place_leads(region: str, industry: str, limit: int = 5) -> list:
-    """모바일 네이버 지도/검색(m.search.naver.com)에서 실시간으로 상위 매장 5곳의 팩트 지표를 고속 스크래핑
+def crawl_naver_place_leads(region: str, industry: str, limit: int = 10) -> list:
+    """모바일 네이버 지도/검색(m.search.naver.com)에서 실시간으로 상위 매장(최대 10곳)의 팩트 지표를 고속 스크래핑
     (UTF-8 강제 디코딩으로 한글 상호명 및 주소 깨짐 완전 차단)
     추출 항목: 상호명, 카테고리, 도로명 주소, 전화번호, 방문자 리뷰 수, 블로그 리뷰 수, 네이버 간편 예약 활성화 여부(True/False)
     """
@@ -1685,9 +1685,9 @@ if search_btn:
             
     # 2) 실제 하이브리드 파이프라인
     else:
-        # 1단계: 네이버 플레이스 모바일 타깃 고속 수집
+        # 1단계: 네이버 플레이스 모바일 타깃 고속 수집 (단일 검색 결과에서 최대 10곳 보존)
         with st.spinner(f"🔍 네이버 검색에서 확인된 '{target_region} {industry}' 후보 업체의 팩트 지표를 실시간 수집 중..."):
-            crawled_leads = crawl_naver_place_leads(target_region, industry, limit=5)
+            crawled_leads = crawl_naver_place_leads(target_region, industry, limit=10)
 
         if not crawled_leads:
             st.warning(f"⚠️ 네이버 플레이스에서 '{target_region} {industry}' 실시간 검색 결과를 찾지 못했습니다. 지역명이나 업종명을 확인해주세요.")
@@ -1700,24 +1700,33 @@ if search_btn:
                 st.warning(f"⚠️ 검색된 후보 중 타깃 조건('{target_region} {industry}')에 부합하는 유효 업체가 없습니다. 지역명(구/시 단위)이나 업종명을 보다 구체적으로 입력해주세요.")
                 lead_results = None
             else:
-                crawled_leads = valid_leads
+                # Lead Selection Engine Core v1:
+                # 1) 전체 유효 후보를 대상으로 결정론적 영업 제안 우선순위 점수 계산
+                for l in valid_leads:
+                    l["priority_score"] = calculate_priority_score(l, target_solution)
 
-                # 2단계: Gemini 경량 파이프라인 (웹 검색 Grounding 없이 주입된 팩트 지표로 초고속 1회 생성)
+                # 2) 점수 내림차순 정렬 (동점 시 네이버 원본 순위 유지 - Stable Sort)
+                sorted_valid_leads = sorted(valid_leads, key=lambda x: x.get("priority_score", 0), reverse=True)
+
+                # 3) 상위 최대 5개 선별 (5개 이하인 경우 전체 유지)
+                selected_leads = sorted_valid_leads[:5]
+
+                # 2단계: Gemini 경량 파이프라인 (선별된 상위 최대 5개 매장만 Single-shot 1회 분석)
                 if gemini_api_key:
                     active_model = gemini_model_choice or resolve_best_model(gemini_api_key)
-                    with st.spinner(f"⚡ 실시간 네이버 데이터 분석 및 {len(crawled_leads)}개 업체 맞춤 피칭 생성 중... (약 5~15초 소요)"):
+                    with st.spinner(f"⚡ 선별된 상위 {len(selected_leads)}개 업체 AI 분석 및 맞춤 피칭 생성 중... (약 5~15초 소요)"):
                         analyzed_leads, err_msg = analyze_crawled_leads_with_gemini(
-                            gemini_api_key, crawled_leads, target_solution, model_name=active_model
+                            gemini_api_key, selected_leads, target_solution, model_name=active_model
                         )
                         if analyzed_leads:
                             lead_results = analyzed_leads
                             st.toast(f"✅ 네이버 플레이스 실시간 팩트 지표 기반 AI 분석이 초고속 완료되었습니다!", icon="🎯")
                         else:
                             st.error(f"AI 분석 중 오류 발생: {err_msg}. 수집된 팩트 지표 기반으로 즉시 보강합니다.")
-                            lead_results = enrich_leads_rule_based(crawled_leads, target_solution)
+                            lead_results = enrich_leads_rule_based(selected_leads, target_solution)
                 else:
                     st.info("ℹ️ Gemini API Key가 입력되지 않아 수집된 팩트 지표(방문자/블로그 리뷰 수, 예약 여부)를 바탕으로 기본 진단 및 피칭을 자동 합성했습니다.")
-                    lead_results = enrich_leads_rule_based(crawled_leads, target_solution)
+                    lead_results = enrich_leads_rule_based(selected_leads, target_solution)
             
     # 세션에 결과 저장하여 탭 이동 및 렌더링 유지
     st.session_state["lead_results"] = lead_results
