@@ -207,34 +207,8 @@ st.markdown("""
         font-size: 12px;
         font-weight: 600;
     }
-    .badge-booking-yes {
-        background: #f0fdf4;
-        color: #16a34a;
-        border: 1px solid #bbf7d0;
-        padding: 3px 8px;
-        border-radius: 6px;
-        font-size: 12px;
-        font-weight: 600;
-    }
-    .badge-booking-no {
-        background: #fef2f2;
-        color: #dc2626;
-        border: 1px solid #fecaca;
-        padding: 3px 8px;
-        border-radius: 6px;
-        font-size: 12px;
-        font-weight: 600;
-    }
-    .badge-review {
-        background: #f8fafc;
-        color: #475569;
-        border: 1px solid #e2e8f0;
-        padding: 3px 8px;
-        border-radius: 6px;
-        font-size: 12px;
-        font-weight: 500;
-    }
-    .badge-fact-yes {
+    /* 팩트 지표 3단계 위계 스타일 (P0-3) */
+    .badge-fact-positive {
         background: #f0fdf4;
         color: #15803d;
         border: 1px solid #bbf7d0;
@@ -246,7 +220,18 @@ st.markdown("""
         align-items: center;
         text-decoration: none;
     }
-    .badge-fact-no {
+    .badge-fact-gap {
+        background: #fffbeb;
+        color: #b45309;
+        border: 1px solid #fde68a;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 11.5px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+    }
+    .badge-fact-neutral {
         background: #f8fafc;
         color: #64748b;
         border: 1px solid #e2e8f0;
@@ -256,6 +241,15 @@ st.markdown("""
         font-weight: 500;
         display: inline-flex;
         align-items: center;
+    }
+    .badge-review {
+        background: #f8fafc;
+        color: #475569;
+        border: 1px solid #e2e8f0;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 500;
     }
     
     /* 결핍 진단 박스 */
@@ -1893,58 +1887,61 @@ if results:
             score_val = lead.get("priority_score", 0)
             score_badge = f'<span class="badge-solution-score">🎯 솔루션 적합도 {score_val}점</span>'
                 
-            # 예약 뱃지 분기
+            # 1) 네이버 간편예약 연동 여부 (확인된 강점 vs 확인된 결핍)
             if lead.get("has_booking"):
-                booking_badge = '<span class="badge-booking-yes">🟢 네이버 간편예약 연동</span>'
+                booking_badge = '<span class="badge-fact-positive">✓ 간편예약 연동</span>'
             else:
-                booking_badge = '<span class="badge-booking-no">🔴 간편예약 미연동</span>'
+                booking_badge = '<span class="badge-fact-gap">● 간편예약 미연동</span>'
                 
             vr_count = lead.get("visitor_reviews", 0)
             br_count = lead.get("blog_reviews", 0)
             review_badge = f'<span class="badge-review">💬 방문자 리뷰 <b>{vr_count:,}</b>개 &nbsp;|&nbsp; 📝 블로그 리뷰 <b>{br_count:,}</b>개</span>'
             
-            # 팩트 뱃지 4종 생성
+            # 2) 공식 홈페이지 (확인된 강점 vs 확인된 결핍)
             hp_url = lead.get("homepage_url")
             if hp_url:
-                hp_badge = f'<a href="{hp_url}" target="_blank" class="badge-fact-yes">🌐 공식 홈페이지 ↗</a>'
+                hp_badge = f'<a href="{hp_url}" target="_blank" class="badge-fact-positive">✓ 공식 홈페이지 ↗</a>'
             else:
-                hp_badge = '<span class="badge-fact-no">🌐 홈페이지 링크 미등록</span>'
+                hp_badge = '<span class="badge-fact-gap">● 홈페이지 링크 미등록</span>'
 
+            # 3) 인스타그램 (확인된 강점 vs 확인된 결핍)
             insta_url = lead.get("instagram_url")
             if insta_url:
-                insta_badge = f'<a href="{insta_url}" target="_blank" class="badge-fact-yes">📸 인스타그램 ↗</a>'
+                insta_badge = f'<a href="{insta_url}" target="_blank" class="badge-fact-positive">✓ 인스타그램 ↗</a>'
             else:
-                insta_badge = '<span class="badge-fact-no">📸 인스타그램 미등록</span>'
+                insta_badge = '<span class="badge-fact-gap">● 인스타 링크 미등록</span>'
 
+            # 4) 네이버 톡톡 (확인된 강점 vs 확인된 결핍)
             if lead.get("has_talktalk"):
                 tt_url = lead.get("talktalk_url")
                 if tt_url:
-                    talktalk_badge = f'<a href="{tt_url}" target="_blank" class="badge-fact-yes">💬 네이버 톡톡 연동 ↗</a>'
+                    talktalk_badge = f'<a href="{tt_url}" target="_blank" class="badge-fact-positive">✓ 네이버 톡톡 ↗</a>'
                 else:
-                    talktalk_badge = '<span class="badge-fact-yes">💬 네이버 톡톡 연동</span>'
+                    talktalk_badge = '<span class="badge-fact-positive">✓ 네이버 톡톡</span>'
             else:
-                talktalk_badge = '<span class="badge-fact-no">💬 톡톡 미연동</span>'
+                talktalk_badge = '<span class="badge-fact-gap">● 톡톡 미연동</span>'
 
+            # 5) 메뉴/가격 정보 (확인된 강점 vs 미확인)
             m_count = lead.get("menu_count", 0)
             if lead.get("has_price_info"):
-                price_badge = f'<span class="badge-fact-yes">🏷️ 메뉴 {m_count}개 (가격 공개)</span>'
+                price_badge = f'<span class="badge-fact-positive">✓ 메뉴 {m_count}개 (가격 공개)</span>'
             elif m_count > 0:
-                price_badge = f'<span class="badge-fact-no">🏷️ 가격 미확인 ({m_count}개)</span>'
+                price_badge = f'<span class="badge-fact-neutral">? 가격 미확인 ({m_count}개)</span>'
             else:
-                price_badge = '<span class="badge-fact-no">🏷️ 메뉴/가격 미확인</span>'
+                price_badge = '<span class="badge-fact-neutral">? 메뉴/가격 미확인</span>'
 
-            # 대표 키워드 뱃지 및 보조 텍스트
+            # 6) 대표 키워드 (정보성 / 중립)
             has_kw = lead.get("has_keywords_info", False) or lead.get("keywords_status") == "confirmed"
             kw_list = lead.get("keywords", [])
             if has_kw:
                 if kw_list:
-                    kw_badge = f'<span class="badge-fact-yes">🔑 대표 키워드 {len(kw_list)}개</span>'
+                    kw_badge = f'<span class="badge-fact-neutral">🔑 대표 키워드 {len(kw_list)}개</span>'
                     kw_text_html = f'<div style="font-size: 12.5px; color: #475569; margin: 4px 0 8px 0;">🔑 <b>대표 키워드:</b> {" · ".join(kw_list)}</div>'
                 else:
-                    kw_badge = '<span class="badge-fact-no">🔑 대표 키워드 0개 확인</span>'
+                    kw_badge = '<span class="badge-fact-neutral">🔑 대표 키워드 0개 확인</span>'
                     kw_text_html = ''
             else:
-                kw_badge = '<span class="badge-fact-no">🔑 대표 키워드 미확인</span>'
+                kw_badge = '<span class="badge-fact-neutral">🔑 대표 키워드 미확인</span>'
                 kw_text_html = ''
 
             place_link_html = ''
