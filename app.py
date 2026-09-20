@@ -1285,13 +1285,13 @@ def analyze_crawled_leads_with_gemini(
 
     prompt = f"""
 당신은 대한민국 최상위 B2B 세일즈 전략 및 비즈니스 전환율 최적화 수석 컨설턴트입니다.
-아래는 네이버 플레이스에서 실시간 직접 수집한 실제 매장 5곳의 [확인된 팩트 데이터]입니다:
+아래는 네이버 플레이스에서 실시간 직접 수집한 실제 매장 {len(leads)}곳의 [확인된 팩트 데이터]입니다:
 
 {facts_json}
 
 나의 제안 솔루션: "{target_solution}"
 
-위 5개 매장의 [확인된 팩트]만을 바탕으로, 각 매장별 [객관적 온라인 접점 진단]과 [3가지 맞춤 피칭 문구]를 작성하세요.
+위 {len(leads)}개 매장의 [확인된 팩트]만을 바탕으로, 각 매장별 [객관적 온라인 접점 진단]과 [3가지 맞춤 피칭 문구]를 작성하세요.
 
 [핵심 작성 원칙 - 절대 엄수]
 1. [미측정 개념 자동 파생 및 사용 금지]:
@@ -1686,29 +1686,38 @@ if search_btn:
     # 2) 실제 하이브리드 파이프라인
     else:
         # 1단계: 네이버 플레이스 모바일 타깃 고속 수집
-        with st.spinner(f"🔍 네이버 검색에서 확인된 '{target_region} {industry}' 5개 후보 업체의 팩트 지표를 실시간 수집 중..."):
+        with st.spinner(f"🔍 네이버 검색에서 확인된 '{target_region} {industry}' 후보 업체의 팩트 지표를 실시간 수집 중..."):
             crawled_leads = crawl_naver_place_leads(target_region, industry, limit=5)
 
         if not crawled_leads:
-            st.warning("⚠️ 네이버 플레이스 실시간 검색 결과를 찾지 못해 샘플 데이터로 안전하게 대체합니다.")
-            crawled_leads = MOCK_LEADS
-
-        # 2단계: Gemini 경량 파이프라인 (웹 검색 Grounding 없이 주입된 팩트 지표로 초고속 1회 생성)
-        if gemini_api_key:
-            active_model = gemini_model_choice or resolve_best_model(gemini_api_key)
-            with st.spinner("⚡ 실시간 네이버 데이터 분석 및 3개 채널별 맞춤 피칭 생성 중... (약 10~20초 소요)"):
-                analyzed_leads, err_msg = analyze_crawled_leads_with_gemini(
-                    gemini_api_key, crawled_leads, target_solution, model_name=active_model
-                )
-                if analyzed_leads:
-                    lead_results = analyzed_leads
-                    st.toast(f"✅ 네이버 플레이스 실시간 팩트 지표 기반 AI 분석이 초고속 완료되었습니다!", icon="🎯")
-                else:
-                    st.error(f"AI 분석 중 오류 발생: {err_msg}. 수집된 팩트 지표 기반으로 즉시 보강합니다.")
-                    lead_results = enrich_leads_rule_based(crawled_leads, target_solution)
+            st.warning(f"⚠️ 네이버 플레이스에서 '{target_region} {industry}' 실시간 검색 결과를 찾지 못했습니다. 지역명이나 업종명을 확인해주세요.")
+            lead_results = None
         else:
-            st.info("ℹ️ Gemini API Key가 입력되지 않아 수집된 팩트 지표(방문자/블로그 리뷰 수, 예약 여부)를 바탕으로 기본 진단 및 피칭을 자동 합성했습니다.")
-            lead_results = enrich_leads_rule_based(crawled_leads, target_solution)
+            # Candidate Sanitizer v1: 명백한 부적합(mismatch) 후보만 제외 (confirmed, uncertain은 그대로 유지)
+            valid_leads = [l for l in crawled_leads if l.get("sanitizer_status") != "mismatch"]
+            
+            if not valid_leads:
+                st.warning(f"⚠️ 검색된 후보 중 타깃 조건('{target_region} {industry}')에 부합하는 유효 업체가 없습니다. 지역명(구/시 단위)이나 업종명을 보다 구체적으로 입력해주세요.")
+                lead_results = None
+            else:
+                crawled_leads = valid_leads
+
+                # 2단계: Gemini 경량 파이프라인 (웹 검색 Grounding 없이 주입된 팩트 지표로 초고속 1회 생성)
+                if gemini_api_key:
+                    active_model = gemini_model_choice or resolve_best_model(gemini_api_key)
+                    with st.spinner(f"⚡ 실시간 네이버 데이터 분석 및 {len(crawled_leads)}개 업체 맞춤 피칭 생성 중... (약 5~15초 소요)"):
+                        analyzed_leads, err_msg = analyze_crawled_leads_with_gemini(
+                            gemini_api_key, crawled_leads, target_solution, model_name=active_model
+                        )
+                        if analyzed_leads:
+                            lead_results = analyzed_leads
+                            st.toast(f"✅ 네이버 플레이스 실시간 팩트 지표 기반 AI 분석이 초고속 완료되었습니다!", icon="🎯")
+                        else:
+                            st.error(f"AI 분석 중 오류 발생: {err_msg}. 수집된 팩트 지표 기반으로 즉시 보강합니다.")
+                            lead_results = enrich_leads_rule_based(crawled_leads, target_solution)
+                else:
+                    st.info("ℹ️ Gemini API Key가 입력되지 않아 수집된 팩트 지표(방문자/블로그 리뷰 수, 예약 여부)를 바탕으로 기본 진단 및 피칭을 자동 합성했습니다.")
+                    lead_results = enrich_leads_rule_based(crawled_leads, target_solution)
             
     # 세션에 결과 저장하여 탭 이동 및 렌더링 유지
     st.session_state["lead_results"] = lead_results
@@ -1729,7 +1738,6 @@ if search_btn:
             target_solution=target_solution,
             lead_count=0
         )
-        st.warning("⚠️ 검색 결과를 가져오지 못했습니다. 업종 또는 지역을 확인해주세요.")
 
 # -------------------------------------------------------------
 # 7. 결과 화면 탭 뷰 (카드 뷰 vs 테이블 뷰)
@@ -2015,4 +2023,4 @@ if results:
                 )
 else:
     # 최초 진입 시 안내 화면
-    st.info("💡 위 설정창에서 타깃 조건(업종, 지역, 제공 서비스)을 확인한 뒤 **'🚀 잠재고객 분석 및 피칭 생성'** 버튼을 클릭해보세요. 네이버 플레이스에서 실제 매장 5곳의 지표를 즉각 수집합니다.")
+    st.info("💡 위 설정창에서 타깃 조건(업종, 지역, 제공 서비스)을 확인한 뒤 **'🚀 잠재고객 분석 및 피칭 생성'** 버튼을 클릭해보세요. 네이버 플레이스에서 실제 매장의 지표를 실시간 수집합니다.")
