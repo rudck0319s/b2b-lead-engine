@@ -1989,21 +1989,21 @@ if results:
             p_partner = lead.get('pitch_partner', '')
             p_dm = lead.get('pitch_dm', '')
 
-            st.markdown("<div style='font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 4px;'>💬 채널별 맞춤 피칭 스크립트 (원클릭 복사):</div>", unsafe_allow_html=True)
-            tab_p1, tab_p2, tab_p3 = st.tabs([
-                "📱 팩트 제안형 (문자/전화)", 
-                "✉️ 정중한 파트너형 (이메일)", 
-                "📸 인스타 DM형 (SNS)"
-            ])
-            with tab_p1:
-                st.caption("💡 실제 지표 팩트를 바탕으로 즉각적인 전환 개선안을 짚어주는 문자/유선 콜드콜용 스크립트입니다.")
-                st.code(p_fact, language="markdown")
-            with tab_p2:
-                st.caption("💡 무료 맞춤 리포트 제공과 파트너십을 정중하게 권하는 공식 이메일/제안서용 멘트입니다.")
-                st.code(p_partner, language="markdown")
-            with tab_p3:
-                st.caption("💡 가벼운 안부와 칭찬으로 대화를 열어 답장률을 극대화하는 인스타그램 DM/SNS용 멘트입니다.")
-                st.code(p_dm, language="markdown")
+            with st.expander("💬 채널별 맞춤 피칭 스크립트 보기", expanded=False):
+                tab_p1, tab_p2, tab_p3 = st.tabs([
+                    "📱 팩트 제안형 (문자/전화)", 
+                    "✉️ 정중한 파트너형 (이메일)", 
+                    "📸 인스타 DM형 (SNS)"
+                ])
+                with tab_p1:
+                    st.caption("💡 실제 지표 팩트를 바탕으로 즉각적인 전환 개선안을 짚어주는 문자/유선 콜드콜용 스크립트입니다.")
+                    st.code(p_fact, language="markdown")
+                with tab_p2:
+                    st.caption("💡 무료 맞춤 리포트 제공과 파트너십을 정중하게 권하는 공식 이메일/제안서용 멘트입니다.")
+                    st.code(p_partner, language="markdown")
+                with tab_p3:
+                    st.caption("💡 가벼운 안부와 칭찬으로 대화를 열어 답장률을 극대화하는 인스타그램 DM/SNS용 멘트입니다.")
+                    st.code(p_dm, language="markdown")
             
             st.write("")
 
