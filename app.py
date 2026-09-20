@@ -178,6 +178,16 @@ st.markdown("""
         font-size: 13px;
         display: inline-block;
     }
+    .badge-solution-score {
+        background: #f0fdf4;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+        font-weight: 700;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-size: 13px;
+        display: inline-block;
+    }
     
     .badge-web-yes {
         background: #eff6ff;
@@ -1879,15 +1889,9 @@ if results:
     # [탭 1: 카드 뷰]
     with tab1:
         for lead in results:
-            # 연락 우선순위 뱃지 분기 (절대 점수 노출 배제)
-            rank_num = lead.get("contact_rank", 1)
-            rank_badge_text = lead.get("rank_badge", f"{rank_num}위")
-            if rank_num == 1:
-                score_badge = f'<span class="badge-score-high">🔥 연락 우선순위 {rank_badge_text}</span>'
-            elif rank_num == 2:
-                score_badge = f'<span class="badge-score-mid">⚡ 연락 우선순위 {rank_badge_text}</span>'
-            else:
-                score_badge = f'<span class="badge-score-low">연락 우선순위 {rank_badge_text}</span>'
+            # 솔루션 적합도 점수 뱃지 (실제 priority_score 사실 그대로 표시)
+            score_val = lead.get("priority_score", 0)
+            score_badge = f'<span class="badge-solution-score">🎯 솔루션 적합도 {score_val}점</span>'
                 
             # 예약 뱃지 분기
             if lead.get("has_booking"):
